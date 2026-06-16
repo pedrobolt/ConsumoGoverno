@@ -85,11 +85,43 @@ python replicate.py         # desagrega, rankeia, gera tabelas e gráfico
 - **SICONFI RREO:** Tesouro Nacional, apidatalake.tesouro.gov.br/ords/siconfi/tt/rreo
   — Anexo 1 (Pessoal/GND) e Anexo 4 (RPPS/contrib. imputadas).
 
-## Grade de candidatos
+## O que este projeto NÃO é
 
-A grade está definida de forma declarativa em `config.py` (`CANDIDATE_SPECS`).
-Cada dicionário é um candidato independente; adicionar ou remover um candidato
-é uma edição de uma linha. Ver comentários em `config.py` para a semântica dos
-campos `sphere`, `stage` e `component`.
+Este projeto testa a **metodologia** de Santos et al. (2015) — desagregação
+proporcional de Denton com indicadores SICONFI — sobre dados 2015–2025.
 
-Por padrão, municípios estão desativados (`INCLUDE_MUNICIPIOS = False`).
+**Não reproduz numericamente** o Anexo I do artigo nem a Tabela 2: os dados
+são diferentes (SICONFI vs Finbra/EOE, 2015–2025 vs 2010–2014) e a extração
+de consumo intermediário é uma aproximação (sem o tradutor IBGE(2008b) + pesos
+Finbra). Qualquer correspondência numérica com os resultados originais é
+coincidência, não validação.
+
+## Grade de indicadores
+
+**Blocos atômicos** (`CANDIDATE_SPECS` em `config.py`): 22 séries trimestrais,
+uma por combinação de esfera × estágio × componente × método de isolamento.
+Alimentam os composites e o diagnóstico de blocos individuais.
+
+**Séries compostas** (`COMPOSITES` em `config.py`): 10 séries economicamente
+defensáveis (7 ativas por padrão), cada uma somando blocos atômicos antes do
+Denton. Estas são o objeto principal do ranking por MSE.
+
+| Série | Esferas | Componentes | Estágio |
+|-------|---------|-------------|---------|
+| uniao_only | U | sal+CE+CI | liquidado |
+| estados_only | E | sal+CE | liquidado |
+| uniao_estados | U+E | sal+CE | liquidado |
+| uniao_estados_ci | U+E | sal+CE+contrib.imp | liquidado |
+| estados_only_lef | E | sal+CE | liq_efetiva |
+| uniao_estados_lef | U+E | sal+CE | liq_efetiva |
+| estados_only_gnd1 | E | sal+CE (GND1) | liquidado |
+| estados_munic* | E+M | sal+CE | liquidado |
+| uniao_estados_munic* | U+E+M | sal+CE | liquidado |
+| uniao_estados_munic_ci* | U+E+M | sal+CE+contrib.imp | liquidado |
+
+\* Ativadas com `INCLUDE_MUNICIPIOS = True`.
+
+O ranking por MSE vs CNT revela qual combinação de cobertura e estágio
+melhor aproxima o consumo do governo trimestral. O diagnóstico de blocos
+individuais (`output/diagnostico_blocos.csv`) indica qual componente isolado
+tem maior correlação com a CNT — útil, mas não é o objeto de replicação.
