@@ -71,65 +71,63 @@ CAPITAIS = {
     "Palmas":          "1721000",
 }
 
-# ── Códigos de natureza de despesa (elemento) ─────────────────────────────────
-# Usados no filtro "element" para salários + contribuições efetivas.
-# Fonte: Santos et al. (2015), Anexo I — portaria SOF/MF natureza 3190xx/3191xx.
-CODES_SALARIOS_CE = [
-    "319011",  # Vencimentos e vantagens fixas — pessoal civil
-    "319012",  # Vencimentos e vantagens fixas — pessoal militar
-    "319013",  # Obrigações patronais (contribuições efetivas)
-    "319113",  # Obrigações patronais — intra-orçamentárias
-]
+# ── Nota sobre granularidade dos dados SICONFI ────────────────────────────────
+# SICONFI RREO Anexo 1 retorna somente o nível GND (Grupo de Natureza de
+# Despesa). Códigos de elemento (319011, 319012, 319013, 319113, 339030, …)
+# existem apenas no SIAFI/SIAFEM e em planos de trabalho estaduais — fontes
+# que o artigo original acessou via SIGA Brasil, mas que o SICONFI bulk API
+# não expõe. Portanto, a comparação elemento-vs-GND que o artigo propõe
+# NÃO É REPLICÁVEL a partir desta fonte. O proxy de salários é o total GND1.
 
-# Usados no filtro "element" para consumo intermediário.
-# O artigo mapeava via tradutor IBGE(2008b) + pesos Finbra/EOE — não replicável.
-# Estes códigos são a aproximação mais próxima disponível só com SICONFI.
-# (a) consumo_intermediario_elem  usa estes códigos — tende a subestimar CI.
-# (b) consumo_intermediario_gnd3  usa total GND3   — tende a superestimar CI.
-# A Série 13 vencedora do artigo exclui CI; estes candidatos existem para
-# completar o espaço de busca, não porque se espere que ganhem.
-CODES_CONSUMO_INT = [
-    "339030",  # Material de consumo
-    "339036",  # Outros serviços de terceiros — pessoa física
-    "339039",  # Outros serviços de terceiros — pessoa jurídica
-]
+# ── Campos SICONFI relevantes (verificados via API em 2024) ──────────────────
+# Resposta Anexo 1: conta, cod_conta, coluna, valor (+ exercicio, periodo, …)
+# GND1 liquidado : cod_conta == 'PessoalEEncargosSociais'
+#                  coluna    == 'DESPESAS LIQUIDADAS NO BIMESTRE'
+# GND1 intra liq : cod_conta == 'PessoalEEncargosSociaisIntra'   (mesma coluna)
+# GND1 RP pagos  : cod_conta == 'RREO6PessoalEEncargosSociais'
+#                  coluna    == 'RESTOS A PAGAR PROCESSADOS PAGOS (b)'
+# GND3 liquidado : cod_conta == 'OutrasDespesasCorrentes'
+#                  coluna    == 'DESPESAS LIQUIDADAS NO BIMESTRE'
+# GND3 RP pagos  : cod_conta == 'RREO6OutrasDespesasCorrentes'
+#                  coluna    == 'RESTOS A PAGAR PROCESSADOS PAGOS (b)'
+# Pré-2018 União : coluna == 'No Bimestre' (duas linhas por conta);
+#                  liquidado = linha onde a PRÓXIMA linha tem coluna ∋ 'Bimestre (h)'
 
-# ── Grade declarativa de candidatos (Anexo I do artigo) ──────────────────────
+# ── Grade declarativa de blocos atômicos ─────────────────────────────────────
 #
-# Cada dicionário define uma série candidata independente.
+# Cada spec define uma série bimestral bruta que build_indicators.py constrói
+# a partir do SICONFI. O bloco resultante é somado por composite em
+# replicate.py antes de entrar em denton_proportional().
 #
 # sphere    : "uniao" | "estados" | "municipios"
+# stage     : "liquidado"      — DESPESAS LIQUIDADAS NO BIMESTRE
+#             "liq_efetiva"    — liquidado + RESTOS A PAGAR PROCESSADOS PAGOS
+# component : "salarios_ce_com_intra" — GND1 total (inclui PessoalEEncargosSociaisIntra)
+#             "salarios_ce_sem_intra" — GND1 s/ intra (só PessoalEEncargosSociais)
+#             "contrib_imputadas"     — RPPS (Anexo 4); só União e Estados
+#             "consumo_int_gnd3"      — GND3 total "OUTRAS DESPESAS CORRENTES"
 #
-# stage     : "liquidado"       — Despesas Liquidadas no bimestre
-#             "restos_a_pagar"  — Restos a Pagar Pagos (simplificado, só SICONFI;
-#                                 o artigo usava pesos Finbra/EOE que não replicamos)
-#             "liq_efetiva"     — liquidado + restos_a_pagar
+# Distinção com/sem intra:
+#   PessoalEEncargosSociaisIntra = contribuições patronais pagas ao RPPS próprio,
+#   registradas como despesa intra-orçamentária. O artigo (Tabela 1) lista CE e CI
+#   como componentes separados (63 bi vs 50 bi em 2010), portanto incluir a intra
+#   não é automaticamente dupla contagem — mas pode sobrepor o Anexo 4 se a intra
+#   e a contrib.imputada medirem o mesmo fluxo. O ranking de MSE decide.
 #
-# component : "salarios_ce_element"        — filtra pelos CODES_SALARIOS_CE acima
-#             "salarios_ce_gnd1"           — total GND1 "PESSOAL E ENCARGOS SOCIAIS"
-#             "contrib_imputadas"          — contrib. previdenciárias imputadas (Anexo 4)
-#             "consumo_intermediario_gnd3" — total GND3 (teto: inclui itens não-CI)
-#             "consumo_intermediario_elem" — filtra pelos CODES_CONSUMO_INT acima
-#                                           (piso: pode excluir itens que o tradutor
-#                                            IBGE(2008b) incluiria via Finbra/EOE)
-#
-# Para salários e consumo intermediário, as duas variantes de isolamento são
-# candidatos separados; o ranking por MSE revela qual se aproxima mais da CNT.
-#
-# Para adicionar um candidato: insira um dicionário. Para remover: comente a linha.
-# Candidatos "municipios" só são processados quando INCLUDE_MUNICIPIOS = True.
+# Composites com "municipios" ficam inativos quando INCLUDE_MUNICIPIOS = False.
+# Para adicionar um bloco: insira um dicionário. Para remover: comente a linha.
 #
 CANDIDATE_SPECS = [
-    # ── União ─────────────────────────────────────────────────────────────────
+    # ── União, liquidado ──────────────────────────────────────────────────────
     {
-        "name": "uniao_liq_sal_elem",
+        "name": "uniao_liq_sal_com_intra",
         "sphere": "uniao", "stage": "liquidado",
-        "component": "salarios_ce_element",
+        "component": "salarios_ce_com_intra",
     },
     {
-        "name": "uniao_liq_sal_gnd1",
+        "name": "uniao_liq_sal_sem_intra",
         "sphere": "uniao", "stage": "liquidado",
-        "component": "salarios_ce_gnd1",
+        "component": "salarios_ce_sem_intra",
     },
     {
         "name": "uniao_liq_contrib",
@@ -137,45 +135,36 @@ CANDIDATE_SPECS = [
         "component": "contrib_imputadas",
     },
     {
-        "name": "uniao_liq_cons_int_gnd3",
+        "name": "uniao_liq_cons_int",
         "sphere": "uniao", "stage": "liquidado",
-        "component": "consumo_intermediario_gnd3",
+        "component": "consumo_int_gnd3",
     },
+    # ── União, liq_efetiva ────────────────────────────────────────────────────
     {
-        "name": "uniao_liq_cons_int_elem",
-        "sphere": "uniao", "stage": "liquidado",
-        "component": "consumo_intermediario_elem",
-    },
-    {
-        "name": "uniao_lef_sal_elem",
+        "name": "uniao_lef_sal_com_intra",
         "sphere": "uniao", "stage": "liq_efetiva",
-        "component": "salarios_ce_element",
+        "component": "salarios_ce_com_intra",
     },
     {
-        "name": "uniao_lef_sal_gnd1",
+        "name": "uniao_lef_sal_sem_intra",
         "sphere": "uniao", "stage": "liq_efetiva",
-        "component": "salarios_ce_gnd1",
+        "component": "salarios_ce_sem_intra",
     },
     {
-        "name": "uniao_lef_cons_int_gnd3",
+        "name": "uniao_lef_cons_int",
         "sphere": "uniao", "stage": "liq_efetiva",
-        "component": "consumo_intermediario_gnd3",
+        "component": "consumo_int_gnd3",
     },
+    # ── Estados, liquidado ────────────────────────────────────────────────────
     {
-        "name": "uniao_lef_cons_int_elem",
-        "sphere": "uniao", "stage": "liq_efetiva",
-        "component": "consumo_intermediario_elem",
-    },
-    # ── Estados ───────────────────────────────────────────────────────────────
-    {
-        "name": "estados_liq_sal_elem",
+        "name": "estados_liq_sal_com_intra",
         "sphere": "estados", "stage": "liquidado",
-        "component": "salarios_ce_element",
+        "component": "salarios_ce_com_intra",
     },
     {
-        "name": "estados_liq_sal_gnd1",
+        "name": "estados_liq_sal_sem_intra",
         "sphere": "estados", "stage": "liquidado",
-        "component": "salarios_ce_gnd1",
+        "component": "salarios_ce_sem_intra",
     },
     {
         "name": "estados_liq_contrib",
@@ -183,61 +172,47 @@ CANDIDATE_SPECS = [
         "component": "contrib_imputadas",
     },
     {
-        "name": "estados_liq_cons_int_gnd3",
+        "name": "estados_liq_cons_int",
         "sphere": "estados", "stage": "liquidado",
-        "component": "consumo_intermediario_gnd3",
+        "component": "consumo_int_gnd3",
     },
+    # ── Estados, liq_efetiva ──────────────────────────────────────────────────
     {
-        "name": "estados_liq_cons_int_elem",
-        "sphere": "estados", "stage": "liquidado",
-        "component": "consumo_intermediario_elem",
-    },
-    {
-        "name": "estados_lef_sal_elem",
+        "name": "estados_lef_sal_com_intra",
         "sphere": "estados", "stage": "liq_efetiva",
-        "component": "salarios_ce_element",
+        "component": "salarios_ce_com_intra",
     },
     {
-        "name": "estados_lef_sal_gnd1",
+        "name": "estados_lef_sal_sem_intra",
         "sphere": "estados", "stage": "liq_efetiva",
-        "component": "salarios_ce_gnd1",
+        "component": "salarios_ce_sem_intra",
     },
     {
-        "name": "estados_lef_cons_int_gnd3",
+        "name": "estados_lef_cons_int",
         "sphere": "estados", "stage": "liq_efetiva",
-        "component": "consumo_intermediario_gnd3",
-    },
-    {
-        "name": "estados_lef_cons_int_elem",
-        "sphere": "estados", "stage": "liq_efetiva",
-        "component": "consumo_intermediario_elem",
+        "component": "consumo_int_gnd3",
     },
     # ── Municípios (capitais) — só com INCLUDE_MUNICIPIOS = True ──────────────
     {
-        "name": "munic_liq_sal_elem",
+        "name": "munic_liq_sal_com_intra",
         "sphere": "municipios", "stage": "liquidado",
-        "component": "salarios_ce_element",
+        "component": "salarios_ce_com_intra",
     },
     {
-        "name": "munic_liq_sal_gnd1",
+        "name": "munic_liq_sal_sem_intra",
         "sphere": "municipios", "stage": "liquidado",
-        "component": "salarios_ce_gnd1",
+        "component": "salarios_ce_sem_intra",
     },
     {
-        "name": "munic_liq_cons_int_gnd3",
+        "name": "munic_liq_cons_int",
         "sphere": "municipios", "stage": "liquidado",
-        "component": "consumo_intermediario_gnd3",
-    },
-    {
-        "name": "munic_liq_cons_int_elem",
-        "sphere": "municipios", "stage": "liquidado",
-        "component": "consumo_intermediario_elem",
+        "component": "consumo_int_gnd3",
     },
 ]
 
 
 def active_specs():
-    """Retorna candidatos ativos conforme INCLUDE_MUNICIPIOS."""
+    """Retorna blocos ativos conforme INCLUDE_MUNICIPIOS."""
     return [
         s for s in CANDIDATE_SPECS
         if s["sphere"] != "municipios" or INCLUDE_MUNICIPIOS
@@ -246,84 +221,74 @@ def active_specs():
 
 # ── Séries compostas — input direto do Denton ────────────────────────────────
 #
-# Cada série composta é a SOMA de blocos atômicos (CANDIDATE_SPECS), agregados
-# trimestralmente antes de entrar em denton_proportional().
+# Cada série composta SOMA blocos atômicos → uma série trimestral → Denton.
+# Este conjunto testa a METODOLOGIA de Santos et al. (2015) sobre dados
+# SICONFI 2015–2025. NÃO reproduz numericamente o Anexo I do artigo.
 #
-# Este conjunto NÃO reproduz o Anexo I original do artigo (diferentes anos,
-# base fiscal e sample). Testa a METODOLOGIA do artigo sobre dados SICONFI
-# 2015–2025 com um conjunto focado e economicamente defensável.
-#
-# Nomenclatura:
-#   _elem   = filtro por códigos de natureza (CODES_SALARIOS_CE / CODES_CONSUMO_INT)
-#   _gnd1   = total GND1 "PESSOAL E ENCARGOS SOCIAIS" (inclui inativos/pensões)
-#   _lef    = liquidação efetiva (liquidado + restos a pagar)
-#
-# Composites com blocos "municipios" ficam inativos quando INCLUDE_MUNICIPIOS=False.
-# Para adicionar uma série: insira um dicionário. Para remover: comente a linha.
+# Sufixos: _com_intra inclui PessoalEEncargosSociaisIntra (contribuições
+#          patronais intra-orçamentárias); _sem_intra exclui.
+#          O ranking de MSE revela qual versão rastreia melhor a CNT.
+#          Nota: se a intra sobrepõe o que o Anexo 4 já captura como
+#          contrib.imputadas, o _com_intra sistematicamente sobrestimará.
 #
 COMPOSITES = [
-    # ── Base: esfera única ou duas esferas, estágio liquidado ─────────────────
+    # ── Base: esfera única ou duas esferas ────────────────────────────────────
 
-    # União: sal+CE (element) + contrib.imputadas (Anexo 4 RPPS) + CI (element)
-    # Inclui contrib.imputadas porque a União reporta RPPS diretamente no Anexo 4;
-    # os composites de Estados não incluem contrib.imputadas (cobertura menos confiável).
+    # União: sal+CE + contrib.imputadas + CI — cobertura plena União
     {"name": "uniao_only",
-     "description": "União: sal+CE+contrib.imp+CI, liquidado, element-level",
-     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib", "uniao_liq_cons_int_elem"]},
+     "description": "União: sal+CE(sem_intra)+contrib.imp+CI, liquidado",
+     "blocks": ["uniao_liq_sal_sem_intra", "uniao_liq_contrib",
+                "uniao_liq_cons_int"]},
 
-    # Estados: sal+CE (element) — candidato mais simples e provável vencedor
+    # Estados: sal+CE sem intra — candidato mais simples
     {"name": "estados_only",
-     "description": "Estados: sal+CE, liquidado, element-level",
-     "blocks": ["estados_liq_sal_elem"]},
+     "description": "Estados: sal+CE sem intra, liquidado",
+     "blocks": ["estados_liq_sal_sem_intra"]},
 
-    # União + Estados: sal+CE (element) — dois maiores entes
+    # Estados: sal+CE com intra — comparação direta com estados_only
+    {"name": "estados_only_com_intra",
+     "description": "Estados: sal+CE com intra, liquidado — compara com estados_only",
+     "blocks": ["estados_liq_sal_com_intra"]},
+
+    # União + Estados: sal+CE sem intra
     {"name": "uniao_estados",
-     "description": "União+Estados: sal+CE, liquidado, element-level",
-     "blocks": ["uniao_liq_sal_elem", "estados_liq_sal_elem"]},
+     "description": "União+Estados: sal+CE sem intra, liquidado",
+     "blocks": ["uniao_liq_sal_sem_intra", "estados_liq_sal_sem_intra"]},
 
-    # União + Estados: sal+CE + contrib.imputadas — remunerações completas
+    # União + Estados: sal+CE + contrib.imputadas (remunerações completas)
     {"name": "uniao_estados_ci",
-     "description": "União+Estados: sal+CE+contrib.imputadas, liquidado — remunerações completas",
-     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
-                "estados_liq_sal_elem", "estados_liq_contrib"]},
+     "description": "União+Estados: sal+CE+contrib.imputadas sem intra, liquidado",
+     "blocks": ["uniao_liq_sal_sem_intra", "uniao_liq_contrib",
+                "estados_liq_sal_sem_intra", "estados_liq_contrib"]},
 
-    # ── liq_efetiva: testa se Restos a Pagar melhoram o ajuste ───────────────
+    # ── liq_efetiva ───────────────────────────────────────────────────────────
 
-    # Estados: sal+CE, liq_efetiva — testa RP nos estados (maior massa salarial)
+    # Estados: sal+CE sem intra, liq_efetiva
     {"name": "estados_only_lef",
-     "description": "Estados: sal+CE, liq_efetiva (liquidado + RP pagos)",
-     "blocks": ["estados_lef_sal_elem"]},
+     "description": "Estados: sal+CE sem intra, liq_efetiva (liquidado + RP pagos)",
+     "blocks": ["estados_lef_sal_sem_intra"]},
 
-    # União + Estados: sal+CE, liq_efetiva
+    # União + Estados: sal+CE sem intra, liq_efetiva
     {"name": "uniao_estados_lef",
-     "description": "União+Estados: sal+CE, liq_efetiva",
-     "blocks": ["uniao_lef_sal_elem", "estados_lef_sal_elem"]},
-
-    # ── GND1 vs element: resolve a questão de isolamento de salários ──────────
-
-    # Estados: sal+CE via GND1 total (inclui inativos/pensionistas)
-    {"name": "estados_only_gnd1",
-     "description": "Estados: sal+CE via GND1 total, liquidado — compara com estados_only",
-     "blocks": ["estados_liq_sal_gnd1"]},
+     "description": "União+Estados: sal+CE sem intra, liq_efetiva",
+     "blocks": ["uniao_lef_sal_sem_intra", "estados_lef_sal_sem_intra"]},
 
     # ── Municípios — ativos apenas com INCLUDE_MUNICIPIOS = True ─────────────
 
-    # Estados + Municípios (capitais): sal+CE element
     {"name": "estados_munic",
-     "description": "Estados+Municípios(capitais): sal+CE, liquidado",
-     "blocks": ["estados_liq_sal_elem", "munic_liq_sal_elem"]},
+     "description": "Estados+Municípios(capitais): sal+CE sem intra, liquidado",
+     "blocks": ["estados_liq_sal_sem_intra", "munic_liq_sal_sem_intra"]},
 
-    # União + Estados + Municípios (capitais): sal+CE element
     {"name": "uniao_estados_munic",
-     "description": "União+Estados+Municípios(capitais): sal+CE, liquidado",
-     "blocks": ["uniao_liq_sal_elem", "estados_liq_sal_elem", "munic_liq_sal_elem"]},
+     "description": "União+Estados+Municípios: sal+CE sem intra, liquidado",
+     "blocks": ["uniao_liq_sal_sem_intra", "estados_liq_sal_sem_intra",
+                "munic_liq_sal_sem_intra"]},
 
-    # União + Estados + Municípios: remunerações completas
     {"name": "uniao_estados_munic_ci",
-     "description": "União+Estados+Municípios(capitais): sal+CE+contrib.imputadas, liquidado",
-     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
-                "estados_liq_sal_elem", "estados_liq_contrib",
-                "munic_liq_sal_elem"]},
+     "description": "União+Estados+Municípios: sal+CE+contrib.imputadas sem intra, liquidado",
+     "blocks": ["uniao_liq_sal_sem_intra", "uniao_liq_contrib",
+                "estados_liq_sal_sem_intra", "estados_liq_contrib",
+                "munic_liq_sal_sem_intra"]},
 ]
 
 
