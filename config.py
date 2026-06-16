@@ -264,10 +264,12 @@ def active_specs():
 COMPOSITES = [
     # ── Base: esfera única ou duas esferas, estágio liquidado ─────────────────
 
-    # União: sal+CE (element) + consumo intermediário (element) — cobertura plena União
+    # União: sal+CE (element) + contrib.imputadas (Anexo 4 RPPS) + CI (element)
+    # Inclui contrib.imputadas porque a União reporta RPPS diretamente no Anexo 4;
+    # os composites de Estados não incluem contrib.imputadas (cobertura menos confiável).
     {"name": "uniao_only",
-     "description": "União: sal+CE+CI, liquidado, element-level",
-     "blocks": ["uniao_liq_sal_elem", "uniao_liq_cons_int_elem"]},
+     "description": "União: sal+CE+contrib.imp+CI, liquidado, element-level",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib", "uniao_liq_cons_int_elem"]},
 
     # Estados: sal+CE (element) — candidato mais simples e provável vencedor
     {"name": "estados_only",

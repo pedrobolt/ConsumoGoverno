@@ -121,6 +121,13 @@ Denton. Estas são o objeto principal do ranking por MSE.
 
 \* Ativadas com `INCLUDE_MUNICIPIOS = True`.
 
+**Assimetria entre esferas:** `uniao_only` inclui contribuições imputadas
+(RPPS federal, extraídas do Anexo 4 RREO), porque a União reporta esses dados
+diretamente nesse anexo. Os composites de Estados não incluem contrib.imputadas:
+a cobertura estadual do Anexo 4 é menos padronizada e o impacto no indicador é
+menor. `uniao_estados_ci` adiciona contrib.imputadas das duas esferas para testar
+se a diferença é relevante para o ajuste.
+
 O ranking por MSE vs CNT revela qual combinação de cobertura e estágio
 melhor aproxima o consumo do governo trimestral. O diagnóstico de blocos
 individuais (`output/diagnostico_blocos.csv`) indica qual componente isolado
