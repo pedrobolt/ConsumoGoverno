@@ -151,6 +151,21 @@ CANDIDATE_SPECS = [
         "sphere": "uniao", "stage": "liq_efetiva",
         "component": "salarios_ce_element",
     },
+    {
+        "name": "uniao_lef_sal_gnd1",
+        "sphere": "uniao", "stage": "liq_efetiva",
+        "component": "salarios_ce_gnd1",
+    },
+    {
+        "name": "uniao_lef_cons_int_gnd3",
+        "sphere": "uniao", "stage": "liq_efetiva",
+        "component": "consumo_intermediario_gnd3",
+    },
+    {
+        "name": "uniao_lef_cons_int_elem",
+        "sphere": "uniao", "stage": "liq_efetiva",
+        "component": "consumo_intermediario_elem",
+    },
     # ── Estados ───────────────────────────────────────────────────────────────
     {
         "name": "estados_liq_sal_elem",
@@ -181,6 +196,21 @@ CANDIDATE_SPECS = [
         "name": "estados_lef_sal_elem",
         "sphere": "estados", "stage": "liq_efetiva",
         "component": "salarios_ce_element",
+    },
+    {
+        "name": "estados_lef_sal_gnd1",
+        "sphere": "estados", "stage": "liq_efetiva",
+        "component": "salarios_ce_gnd1",
+    },
+    {
+        "name": "estados_lef_cons_int_gnd3",
+        "sphere": "estados", "stage": "liq_efetiva",
+        "component": "consumo_intermediario_gnd3",
+    },
+    {
+        "name": "estados_lef_cons_int_elem",
+        "sphere": "estados", "stage": "liq_efetiva",
+        "component": "consumo_intermediario_elem",
     },
     # ── Municípios (capitais) — só com INCLUDE_MUNICIPIOS = True ──────────────
     {
