@@ -31,6 +31,18 @@ Esses microdados não estão disponíveis publicamente no SICONFI; este projeto
 usa a soma direta dos RP pagos reportados no RREO — uma aproximação simplificada.
 O impacto é documentado no ranking de MSE (coluna `mse` em `output/ranking.csv`).
 
+**Nota sobre Consumo Intermediário:** O artigo extraía CI do GND3 usando pesos
+Finbra/EOE e o tradutor de contas IBGE(2008b), que não estão disponíveis.
+Este projeto testa duas aproximações:
+
+- `consumo_intermediario_gnd3` — total do GND3 ("OUTRAS DESPESAS CORRENTES"):
+  teto, pois inclui itens que não são CI (transferências, multas, etc.).
+- `consumo_intermediario_elem` — filtro pelos elementos 339030, 339036 e 339039:
+  piso, pois pode excluir itens que o tradutor incluiria.
+
+A Série 13 vencedora do artigo excluía CI inteiramente; esses candidatos existem
+para completar o espaço de busca, sem expectativa de vitória no ranking.
+
 ## Estrutura
 
 ```

@@ -81,6 +81,19 @@ CODES_SALARIOS_CE = [
     "319113",  # Obrigações patronais — intra-orçamentárias
 ]
 
+# Usados no filtro "element" para consumo intermediário.
+# O artigo mapeava via tradutor IBGE(2008b) + pesos Finbra/EOE — não replicável.
+# Estes códigos são a aproximação mais próxima disponível só com SICONFI.
+# (a) consumo_intermediario_elem  usa estes códigos — tende a subestimar CI.
+# (b) consumo_intermediario_gnd3  usa total GND3   — tende a superestimar CI.
+# A Série 13 vencedora do artigo exclui CI; estes candidatos existem para
+# completar o espaço de busca, não porque se espere que ganhem.
+CODES_CONSUMO_INT = [
+    "339030",  # Material de consumo
+    "339036",  # Outros serviços de terceiros — pessoa física
+    "339039",  # Outros serviços de terceiros — pessoa jurídica
+]
+
 # ── Grade declarativa de candidatos (Anexo I do artigo) ──────────────────────
 #
 # Cada dicionário define uma série candidata independente.
@@ -92,13 +105,16 @@ CODES_SALARIOS_CE = [
 #                                 o artigo usava pesos Finbra/EOE que não replicamos)
 #             "liq_efetiva"     — liquidado + restos_a_pagar
 #
-# component : "salarios_ce_element"    — filtra pelos CODES_SALARIOS_CE acima
-#             "salarios_ce_gnd1"       — total GND1 "PESSOAL E ENCARGOS SOCIAIS"
-#             "contrib_imputadas"      — contrib. previdenciárias imputadas (Anexo 4)
-#             "consumo_intermediario"  — material de consumo + serviços (GND3)
+# component : "salarios_ce_element"        — filtra pelos CODES_SALARIOS_CE acima
+#             "salarios_ce_gnd1"           — total GND1 "PESSOAL E ENCARGOS SOCIAIS"
+#             "contrib_imputadas"          — contrib. previdenciárias imputadas (Anexo 4)
+#             "consumo_intermediario_gnd3" — total GND3 (teto: inclui itens não-CI)
+#             "consumo_intermediario_elem" — filtra pelos CODES_CONSUMO_INT acima
+#                                           (piso: pode excluir itens que o tradutor
+#                                            IBGE(2008b) incluiria via Finbra/EOE)
 #
-# salarios_ce_element vs salarios_ce_gnd1 são duas formas de isolar o mesmo
-# componente; o ranking por MSE revela empiricamente qual se aproxima mais da CNT.
+# Para salários e consumo intermediário, as duas variantes de isolamento são
+# candidatos separados; o ranking por MSE revela qual se aproxima mais da CNT.
 #
 # Para adicionar um candidato: insira um dicionário. Para remover: comente a linha.
 # Candidatos "municipios" só são processados quando INCLUDE_MUNICIPIOS = True.
@@ -121,9 +137,14 @@ CANDIDATE_SPECS = [
         "component": "contrib_imputadas",
     },
     {
-        "name": "uniao_liq_cons_int",
+        "name": "uniao_liq_cons_int_gnd3",
         "sphere": "uniao", "stage": "liquidado",
-        "component": "consumo_intermediario",
+        "component": "consumo_intermediario_gnd3",
+    },
+    {
+        "name": "uniao_liq_cons_int_elem",
+        "sphere": "uniao", "stage": "liquidado",
+        "component": "consumo_intermediario_elem",
     },
     {
         "name": "uniao_lef_sal_elem",
@@ -147,9 +168,14 @@ CANDIDATE_SPECS = [
         "component": "contrib_imputadas",
     },
     {
-        "name": "estados_liq_cons_int",
+        "name": "estados_liq_cons_int_gnd3",
         "sphere": "estados", "stage": "liquidado",
-        "component": "consumo_intermediario",
+        "component": "consumo_intermediario_gnd3",
+    },
+    {
+        "name": "estados_liq_cons_int_elem",
+        "sphere": "estados", "stage": "liquidado",
+        "component": "consumo_intermediario_elem",
     },
     {
         "name": "estados_lef_sal_elem",
@@ -168,9 +194,14 @@ CANDIDATE_SPECS = [
         "component": "salarios_ce_gnd1",
     },
     {
-        "name": "munic_liq_cons_int",
+        "name": "munic_liq_cons_int_gnd3",
         "sphere": "municipios", "stage": "liquidado",
-        "component": "consumo_intermediario",
+        "component": "consumo_intermediario_gnd3",
+    },
+    {
+        "name": "munic_liq_cons_int_elem",
+        "sphere": "municipios", "stage": "liquidado",
+        "component": "consumo_intermediario_elem",
     },
 ]
 
