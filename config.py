@@ -242,3 +242,151 @@ def active_specs():
         s for s in CANDIDATE_SPECS
         if s["sphere"] != "municipios" or INCLUDE_MUNICIPIOS
     ]
+
+
+# ── Grade de séries compostas (input real do Denton) ─────────────────────────
+#
+# Cada série composta é a SOMA de um conjunto de blocos atômicos de CANDIDATE_SPECS,
+# agregados trimestralmente antes de entrar em denton_proportional().
+#
+# Séries 01–13: reconstrução do Anexo I do artigo. Os exemplos do usuário fixam
+# serie_01, serie_03 e serie_13; as demais seguem a progressão metodológica
+# implícita (esfera mínima → expansão de esfera → expansão de componente →
+# liq_efetiva → cobertura total). Corrijam conforme o Anexo I original.
+#
+# Séries ext_*: extensões não presentes no artigo — testam os variantes GND1/GND3
+# que o artigo não precisava distinguir (usava Finbra/EOE para CI e elemento-level
+# direto para salários). O ranking de MSE revelará se fazem diferença.
+#
+# Composites que referenciam blocos "municipios" ficam inativos quando
+# INCLUDE_MUNICIPIOS = False (active_composites() filtra automaticamente).
+#
+# Para adicionar uma série: insira um dicionário. Para remover: comente a linha.
+#
+COMPOSITES = [
+    # ── Anexo I — séries 01 a 13 (reconstrução; serie_01/03/13 fixadas pelo artigo) ──
+
+    # Série 01 — União: sal_ce + contrib_imp, liquidado
+    {"name": "serie_01",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib"]},
+
+    # Série 02 — União: sal_ce + contrib_imp + CI_elem, liquidado
+    {"name": "serie_02",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
+                "uniao_liq_cons_int_elem"]},
+
+    # Série 03 — União+Estados: sal_ce+contrib (U) + sal_ce (E), liquidado
+    {"name": "serie_03",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
+                "estados_liq_sal_elem"]},
+
+    # Série 04 — União+Estados: sal_ce+contrib ambos, liquidado
+    {"name": "serie_04",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
+                "estados_liq_sal_elem", "estados_liq_contrib"]},
+
+    # Série 05 — União+Estados: sal_ce+contrib (U+E) + CI_elem (U), liquidado
+    {"name": "serie_05",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
+                "estados_liq_sal_elem",
+                "uniao_liq_cons_int_elem"]},
+
+    # Série 06 — União+Estados: todos os componentes, liquidado
+    {"name": "serie_06",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
+                "estados_liq_sal_elem", "estados_liq_contrib",
+                "uniao_liq_cons_int_elem", "estados_liq_cons_int_elem"]},
+
+    # Série 07 — União: sal_ce + contrib, liq_efetiva (sal), liquidado (contrib)
+    {"name": "serie_07",
+     "blocks": ["uniao_lef_sal_elem", "uniao_liq_contrib"]},
+
+    # Série 08 — União+Estados: sal_ce lef + contrib liq (U); sal_ce lef (E)
+    {"name": "serie_08",
+     "blocks": ["uniao_lef_sal_elem", "uniao_liq_contrib",
+                "estados_lef_sal_elem"]},
+
+    # Série 09 — União+Estados: sal_ce lef + contrib liq, ambas esferas
+    {"name": "serie_09",
+     "blocks": ["uniao_lef_sal_elem", "uniao_liq_contrib",
+                "estados_lef_sal_elem", "estados_liq_contrib"]},
+
+    # Série 10 — Estados: sal_ce apenas, liquidado
+    {"name": "serie_10",
+     "blocks": ["estados_liq_sal_elem"]},
+
+    # Série 11 — Estados: sal_ce + contrib, liquidado
+    {"name": "serie_11",
+     "blocks": ["estados_liq_sal_elem", "estados_liq_contrib"]},
+
+    # Série 12 — União+Estados+Municípios: sal_ce+contrib (U+E) + sal_ce (M)
+    {"name": "serie_12",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
+                "estados_liq_sal_elem", "estados_liq_contrib",
+                "munic_liq_sal_elem"]},
+
+    # Série 13 — União+Estados+Municípios: sal_ce+contrib (U) + sal_ce (E+M)  ← VENCEDORA
+    {"name": "serie_13",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
+                "estados_liq_sal_elem",
+                "munic_liq_sal_elem"]},
+
+    # ── Extensões: variantes GND1 para salários ───────────────────────────────
+    # Espelham as séries 01, 03, 10, 11, 13 com GND1 em vez de element-level.
+
+    {"name": "ext_01_gnd1",
+     "blocks": ["uniao_liq_sal_gnd1", "uniao_liq_contrib"]},
+
+    {"name": "ext_03_gnd1",
+     "blocks": ["uniao_liq_sal_gnd1", "uniao_liq_contrib",
+                "estados_liq_sal_gnd1"]},
+
+    {"name": "ext_10_gnd1",
+     "blocks": ["estados_liq_sal_gnd1"]},
+
+    {"name": "ext_11_gnd1",
+     "blocks": ["estados_liq_sal_gnd1", "estados_liq_contrib"]},
+
+    {"name": "ext_13_gnd1",
+     "blocks": ["uniao_liq_sal_gnd1", "uniao_liq_contrib",
+                "estados_liq_sal_gnd1",
+                "munic_liq_sal_gnd1"]},
+
+    # ── Extensões: variantes com CI via GND3 (teto) ───────────────────────────
+
+    {"name": "ext_02_ci_gnd3",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
+                "uniao_liq_cons_int_gnd3"]},
+
+    {"name": "ext_06_ci_gnd3",
+     "blocks": ["uniao_liq_sal_elem", "uniao_liq_contrib",
+                "estados_liq_sal_elem", "estados_liq_contrib",
+                "uniao_liq_cons_int_gnd3", "estados_liq_cons_int_gnd3"]},
+
+    # ── Extensões: liq_efetiva com GND1 ──────────────────────────────────────
+
+    {"name": "ext_07_gnd1_lef",
+     "blocks": ["uniao_lef_sal_gnd1", "uniao_liq_contrib"]},
+
+    {"name": "ext_08_gnd1_lef",
+     "blocks": ["uniao_lef_sal_gnd1", "uniao_liq_contrib",
+                "estados_lef_sal_gnd1"]},
+
+    # liq_efetiva variant of serie_13
+    {"name": "ext_13_lef",
+     "blocks": ["uniao_lef_sal_elem", "uniao_liq_contrib",
+                "estados_lef_sal_elem",
+                "munic_liq_sal_elem"]},
+]
+
+
+def active_composites():
+    """
+    Retorna composites cujos blocos estão todos disponíveis.
+    Composites com blocos "municipios" ficam inativos quando INCLUDE_MUNICIPIOS=False.
+    """
+    available = {s["name"] for s in active_specs()}
+    return [
+        c for c in COMPOSITES
+        if all(b in available for b in c["blocks"])
+    ]
