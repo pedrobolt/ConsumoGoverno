@@ -1,0 +1,30 @@
+# dados e saídas — não versionar (podem ser grandes ou regenerados)
+data/
+output/
+
+# ambiente Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# ferramentas de AI — não versionar
+.claude/
+CLAUDE.md
+.cursor/
+.copilot/
+
+# sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editor
+.vscode/
+.idea/
+*.swp

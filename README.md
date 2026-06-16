@@ -1,0 +1,83 @@
+# Consumo Nominal do Governo — Replicação Santos et al. (2015)
+
+Replicação metodológica de:
+
+> Santos, C. H. M. dos, et al. (2015). *Uma metodologia de estimação do consumo do
+> governo em base trimestral*. IPEA Carta de Conjuntura nº 27.
+
+## O que este projeto faz
+
+Estima o consumo nominal do governo brasileiro em frequência trimestral usando dados
+fiscais bimestrais do SICONFI RREO como indicador de alta frequência e a CNT anual
+do IBGE como benchmark. A estimativa segue o método de desagregação proporcional
+de Denton (1971).
+
+**Cobertura:** 2015–2025 (início do SICONFI). O artigo original cobre 2010–2014
+com uma base de dados diferente; os números da Tabela 2 original não são
+numericamente reproduzíveis aqui — o que se replica é a *metodologia*.
+
+## Desvios em relação ao artigo original
+
+| Aspecto | Artigo (2015) | Este projeto |
+|---------|--------------|--------------|
+| Cobertura temporal | 2010–2014 | 2015–2025 |
+| Base fiscal subnacional | Finbra + EOE (pesos para RP) | SICONFI RREO (simplificado) |
+| Restos a Pagar | Pesos Finbra/EOE por esfera | Soma direta SICONFI (ver nota) |
+| Municípios | Capitais com ponderação | Capitais, sem ponderação (OFF por padrão) |
+
+**Nota sobre Restos a Pagar:** O artigo usa pesos derivados do Finbra e do
+Balanço do Setor Público (EOE) para distribuir RP entre esferas de governo.
+Esses microdados não estão disponíveis publicamente no SICONFI; este projeto
+usa a soma direta dos RP pagos reportados no RREO — uma aproximação simplificada.
+O impacto é documentado no ranking de MSE (coluna `mse` em `output/ranking.csv`).
+
+## Estrutura
+
+```
+config.py            — entidades, grade declarativa de candidatos, caminhos
+download.py          — baixa CNT (IBGE) + RREO (SICONFI) → data/raw/
+build_indicators.py  — raw → séries trimestrais por componente e candidato
+denton.py            — desagregação proporcional de Denton + helpers
+replicate.py         — roda a grade, rankeia por MSE, gera tabelas e gráfico
+deflate.py           — série real: deflator implícito CNT + crescimento a/a
+
+data/raw/            — dados brutos baixados (não versionados)
+data/processed/      — séries trimestrais intermediárias
+output/              — resultados finais (não versionados)
+```
+
+## Como executar
+
+```bash
+pip install -r requirements.txt
+
+python download.py          # baixa dados brutos (~10–20 min na primeira vez)
+python build_indicators.py  # constrói grade de candidatos
+python replicate.py         # desagrega, rankeia, gera tabelas e gráfico
+```
+
+## Saídas
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `output/ranking.csv` | Todos os candidatos ordenados por MSE (≈ Anexo I) |
+| `output/tabela2_desvios.csv` | Melhor série vs CNT, desvios trimestrais (Tabela 2) |
+| `output/tabela3_repres.csv` | Representatividade dos componentes vs TRU anual (Tabela 3) |
+| `output/serie_real.csv` | Série deflacionada + crescimento real a/a |
+| `output/fig_serie.png` | Melhor série vs CNT — linha (Gráfico 1) |
+
+## Fontes de dados
+
+- **CNT (benchmark):** IBGE, Tab_Compl_CNT.zip — coluna "Consumo do Governo",
+  valores correntes e índice de volume (base 2010=100).
+- **SICONFI RREO:** Tesouro Nacional, apidatalake.tesouro.gov.br/ords/siconfi/tt/rreo
+  — Anexo 1 (Pessoal/GND) e Anexo 4 (RPPS/contrib. imputadas).
+
+## Grade de candidatos
+
+A grade está definida de forma declarativa em `config.py` (`CANDIDATE_SPECS`).
+Cada dicionário é um candidato independente; adicionar ou remover um candidato
+é uma edição de uma linha. Ver comentários em `config.py` para a semântica dos
+campos `sphere`, `stage` e `component`.
+
+Por padrão, municípios estão desativados (`INCLUDE_MUNICIPIOS = False`).
