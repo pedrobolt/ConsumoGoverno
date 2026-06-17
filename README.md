@@ -145,3 +145,4 @@ efeito pode ser testado diretamente contra a versão sem contrib.imputadas.
 O ranking por MSE vs CNT revela qual combinação melhor aproxima o consumo
 do governo trimestral. O diagnóstico de blocos individuais
 (`output/diagnostico_blocos.csv`) é útil, mas não é o objeto de replicação.
+
