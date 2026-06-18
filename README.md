@@ -54,6 +54,18 @@ o GND3 existe como diagnóstico, não como candidato esperado.
 `RREO6PessoalEEncargosSociais`), sem os pesos Finbra/EOE que o artigo aplicava
 para distribuir RP entre esferas. Impacto visível no ranking de MSE.
 
+**Municípios (capitais):** desativados por padrão (`INCLUDE_MUNICIPIOS = False`).
+Testados empiricamente sobre 2015-2025: os 27 municípios-capital adicionam
+**+5,1 pp de representatividade** (de 29,3% para 34,4% da CNT, estável em todos
+os anos), o que é economicamente relevante — SP sozinho soma ~R$ 33 bi/ano em
+pessoal. Porém, o critério de seleção do artigo é o **MSE vs CNT**, e incluir
+as capitais *piora* o ajuste: `estados_munic` (RMSE = 13,9) fica atrás de
+`estados_only` (RMSE = 13,6) e ambos atrás do vencedor `estados_only_lef`
+(RMSE = 12,0). O motivo provável é a temporização diferente dos Restos a
+Pagar municipais. **Lacuna conhecida:** as capitais foram testadas apenas
+contra `liquidado`; a interação com `liq_efetiva` não foi testada. Para
+ativá-las: `INCLUDE_MUNICIPIOS = True` em `config.py`.
+
 ## Intra-orçamentárias: com ou sem?
 
 `PessoalEEncargosSociaisIntra` representa as contribuições patronais pagas
@@ -141,6 +153,22 @@ padrão), cada uma somando blocos atômicos antes do Denton.
 diretamente nesse anexo e são parte das remunerações na CNT. Os composites
 de Estados usam o Anexo 4 estadual somente em `uniao_estados_ci`, onde o
 efeito pode ser testado diretamente contra a versão sem contrib.imputadas.
+
+**Resultado empírico (2015-2025, 44 trimestres, INCLUDE_MUNICIPIOS=False):**
+
+| Rank | Série | RMSE | MAPE | Corr |
+|------|-------|------|------|------|
+| 1 | `estados_only_lef` | 12,0 | 2,40% | 0,994 |
+| 2 | `estados_only` | 13,6 | 2,67% | 0,992 |
+| 3 | `estados_only_com_intra` | 13,9 | 2,57% | 0,992 |
+| 4 | `uniao_estados_lef` | 14,0 | 2,69% | 0,992 |
+| 5 | `uniao_estados_ci` | 15,5 | 2,70% | 0,990 |
+| 6 | `uniao_estados` | 15,9 | 2,75% | 0,989 |
+| 7 | `uniao_only` | 65,3 | 9,13% | 0,835 |
+
+A série selecionada (`estados_only_lef`) usa GND1 sem intra-orçamentárias,
+estágio `liq_efetiva` (liquidado + RP Processados Pagos), esfera estados.
+`tabela2_desvios.csv` e `fig_serie.png` correspondem a esta série.
 
 O ranking por MSE vs CNT revela qual combinação melhor aproxima o consumo
 do governo trimestral. O diagnóstico de blocos individuais

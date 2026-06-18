@@ -338,7 +338,7 @@ def plot_best_series(tab2: pd.DataFrame) -> None:
     out = OUTPUT / "fig_serie.png"
     fig.savefig(out, dpi=150)
     plt.close(fig)
-    print(f"  fig_serie.png → {out}")
+    print(f"  fig_serie.png -> {out}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -86,7 +86,7 @@ def main() -> None:
     df = build_serie_real()
     out = OUTPUT / "serie_real.csv"
     df.to_csv(out, index=False)
-    print(f"  serie_real.csv: {len(df)} trimestres → {out}")
+    print(f"  serie_real.csv: {len(df)} trimestres -> {out}")
 
     recent = df.dropna(subset=["variacao_aa_pct"]).tail(8)
     if not recent.empty:

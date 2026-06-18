@@ -228,7 +228,7 @@ def build_cnt_benchmark() -> None:
     df = df[df["ano"].between(YEAR_START, YEAR_END)].copy()
     out = DATA_PROC / "cnt_benchmark.csv"
     df.to_csv(out, index=False)
-    print(f"  cnt_benchmark: {len(df)} trimestres → {out.name}")
+    print(f"  cnt_benchmark: {len(df)} trimestres -> {out.name}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

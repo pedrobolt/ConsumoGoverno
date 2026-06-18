@@ -213,7 +213,7 @@ def _pull_sphere(
         for b in bimestres
         if (str(id_ente), y, b) not in done
     )
-    print(f"  {label}: {todo} chamadas pendentes ({len(done)} já salvas)")
+    print(f"  {label}: {todo} chamadas pendentes ({len(done)} ja salvas)", flush=True)
 
     n = 0
     for uf_label, id_ente in entities.items():
@@ -229,12 +229,12 @@ def _pull_sphere(
                     n += 1
                     if n % 100 == 0:
                         pct = 100 * n / max(todo, 1)
-                        print(f"    {label}: {n}/{todo} ({pct:.0f}%)")
+                        print(f"    {label}: {n}/{todo} ({pct:.0f}%)", flush=True)
                 except RuntimeError as exc:
                     print(f"    WARN: {exc} — pulando", file=sys.stderr)
                 time.sleep(CALL_DELAY)
 
-    print(f"  {label}: concluído ({n} novas chamadas → {out_path.name})")
+    print(f"  {label}: concluido ({n} novas chamadas -> {out_path.name})", flush=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -328,7 +328,7 @@ def download_cnt(force: bool = False) -> None:
     )
     df = df.sort_values(["ano", "trimestre"]).reset_index(drop=True)
     df.to_csv(out_path, index=False)
-    print(f"  CNT: {len(df)} trimestres salvos → {out_path.name}")
+    print(f"  CNT: {len(df)} trimestres salvos -> {out_path.name}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
