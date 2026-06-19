@@ -123,6 +123,14 @@ python replicate.py         # desagrega, rankeia, gera tabelas e gráfico
 - **SICONFI RREO:** Tesouro Nacional, apidatalake.tesouro.gov.br/ords/siconfi/tt/rreo
   — Anexo 1 (Pessoal/GND, `no_co_tipo_demonstrativo="RREO - Anexo 1"`) e
   Anexo 4 (RPPS/contrib. imputadas, `no_co_tipo_demonstrativo="RREO - Anexo 4"`).
+- **TRU (denominador Tabela 3):** IBGE, SCN edicao 2021,
+  `TRU_resumo_2000_2021_xls.zip` — coluna "Administracao publica" (detectada
+  dinamicamente via linha de contribuicoes imputadas dos empregadores).
+  Linhas utilizadas: 54 = Remuneracoes dos empregados; 59 = Contribuicoes
+  imputadas dos empregadores. Unidade no arquivo: R$ 1 milhao (verificado
+  empiricamente; GDP 2021 bate R$9 T); convertido para R$ bilhoes (/ 1000).
+  Cobertura: 2000-2021; edicao 2021 e a ultima com decomposicao nao-nula por
+  componente de governo. Anos 2022+ sao omitidos da Tabela 3.
 
 ## Grade de indicadores
 
@@ -173,4 +181,44 @@ estágio `liq_efetiva` (liquidado + RP Processados Pagos), esfera estados.
 O ranking por MSE vs CNT revela qual combinação melhor aproxima o consumo
 do governo trimestral. O diagnóstico de blocos individuais
 (`output/diagnostico_blocos.csv`) é útil, mas não é o objeto de replicação.
+
+**Resultado empírico — Tabela 3 (representatividade vs TRU, INCLUDE_MUNICIPIOS=False):**
+
+A Tabela 3 divide cada componente da amostra SICONFI pelo total do mesmo componente
+na TRU "governo geral" (coluna Administração Pública). O numerador usa
+`estados_lef_sal_sem_intra` para remunerações (GND1 sem intra, liq_efetiva).
+
+| Ano  | Componente            | TRU (R$ bi) | Amostra (R$ bi) | Repr. (%) |
+|------|-----------------------|-------------|-----------------|-----------|
+| 2015 | remuneracoes_sal_ce   | 797,9       | 583,7           | 73,2%     |
+| 2016 | remuneracoes_sal_ce   | 847,0       | 619,6           | 73,2%     |
+| 2017 | remuneracoes_sal_ce   | 897,7       | 681,3           | 75,9%     |
+| 2018 | remuneracoes_sal_ce   | 938,5       | 819,0           | 87,3%     |
+| 2019 | remuneracoes_sal_ce   | 990,2       | 953,3           | 96,3%     |
+| 2020 | remuneracoes_sal_ce   | 1.028,9     | 960,9           | 93,4%     |
+| 2021 | remuneracoes_sal_ce   | 1.076,9     | 988,4           | 91,8%     |
+| 2021 | contrib_imputadas     | 100,6       | 33,5            | 33,3%     |
+
+Desvios em relação ao artigo original na Tabela 3:
+
+| Aspecto | Artigo (2015) | Este projeto |
+|---------|--------------|--------------|
+| Remunerações | Separado: sal. + contrib. efetivas | GND1 sem intra (SICONFI não separa) |
+| Contrib. imputadas | Cobertura plena U+E | Só estados, só 2021 (União não reporta no SICONFI; estados só a partir de 2021) |
+| Cobertura TRU | 2010-2014 | 2015-2021 (TRU SCN-2021) |
+
+**Lacuna RP Processados Pagos (2015-2017):** A representatividade de
+2015-2017 (~73-76%) subestima a cobertura real em ~20 pp porque o SICONFI
+nao reportava Restos a Pagar Processados Pagos para estados antes de 2018.
+A partir de 2018, com RP disponivel, a cobertura sobe para ~87-96%,
+consistente com a participacao dos 27 estados nas remuneracoes nacionais.
+O Denton nao e afetado por essa lacuna (MAPE sem quebra estrutural
+pre/pos-2018) porque usa apenas o perfil sazonal, nao o nivel.
+As linhas de 2015-2017 em `tabela3_repres.csv` trazem a nota
+"RP indisponivel no SICONFI" na coluna `nota`.
+
+**Lacuna contrib_imputadas:** SICONFI Anexo 4 nao retorna dados de
+`ReceitaDeContribuicoesPatronalFinanceiro` para a Uniao nem para estados
+antes de 2021. A cobertura de 33,3% em 2021 reflete apenas os estados
+(sem Uniao), que e a maior componente das contribuicoes imputadas.
 

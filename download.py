@@ -29,6 +29,8 @@ from config import (
     INCLUDE_MUNICIPIOS,
     ESTADOS_SUBSET,
     TODOS_ESTADOS,
+    TRU_EDITION,
+    TRU_ZIP_URL,
     YEAR_END,
     YEAR_START,
 )
@@ -334,6 +336,89 @@ def download_cnt(force: bool = False) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
+# TRU download
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _find_tru_govt_col(df: pd.DataFrame) -> int | None:
+    """
+    Locate the government activity column by finding the row for
+    'Contribuicoes sociais imputadas' (only govt has non-zero values there)
+    and returning the index of the first positive entry in cols 5-30.
+    """
+    for i in range(50, 70):
+        label = str(df.iloc[i, 0]).strip()
+        if "imputada" in label.lower():
+            for j in range(5, 30):
+                try:
+                    if float(df.iloc[i, j]) > 0:
+                        return j
+                except (TypeError, ValueError):
+                    pass
+    return None
+
+
+def download_tru(force: bool = False) -> None:
+    """
+    Download TRU_resumo_2000_2021_xls.zip from IBGE and parse component values
+    for the government activity into data/raw/tru_governo.csv.
+
+    Output schema: ano, componente, governo_bilhoes
+      componente in {"remuneracoes", "contrib_imputadas"}
+      governo_bilhoes: raw TRU value / 1000 (TRU unit = R$ 1 milhao)
+
+    Covers years max(YEAR_START, 2000) through TRU_EDITION (2015-2021 by default).
+    """
+    out_path = DATA_RAW / "tru_governo.csv"
+    if out_path.exists() and not force:
+        print(f"  TRU: {out_path.name} ja existe -- use --force para re-baixar")
+        return
+
+    print(f"  TRU: baixando {TRU_ZIP_URL} ...", flush=True)
+    req = urllib.request.Request(TRU_ZIP_URL, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        raw = r.read()
+    print(f"  TRU: {len(raw) // 1024} KB baixados", flush=True)
+
+    zf = zipfile.ZipFile(io.BytesIO(raw))
+    rows: list[dict] = []
+
+    for year in range(max(YEAR_START, 2000), TRU_EDITION + 1):
+        fname = f"TRU{year}resumo.xls"
+        if fname not in zf.namelist():
+            print(f"  TRU {year}: arquivo nao encontrado no ZIP -- pulando", file=sys.stderr)
+            continue
+
+        with zf.open(fname) as f:
+            df = pd.read_excel(f, sheet_name=0, header=None, engine="xlrd")
+
+        govt_col = _find_tru_govt_col(df)
+        if govt_col is None:
+            print(f"  TRU {year}: coluna governo nao encontrada -- pulando", file=sys.stderr)
+            continue
+
+        for i in range(50, min(70, df.shape[0])):
+            label = str(df.iloc[i, 0]).strip()
+            try:
+                val = float(df.iloc[i, govt_col])
+            except (TypeError, ValueError):
+                continue
+
+            if "Remunera" in label:
+                rows.append({"ano": year, "componente": "remuneracoes_sal_ce", "governo_bilhoes": val / 1000.0})
+            elif "imputada" in label.lower():
+                rows.append({"ano": year, "componente": "contrib_imputadas", "governo_bilhoes": val / 1000.0})
+
+        print(f"  TRU {year}: ok", flush=True)
+
+    if not rows:
+        print("  TRU: nenhum dado extraido -- verifique o ZIP", file=sys.stderr)
+        return
+
+    pd.DataFrame(rows).sort_values(["ano", "componente"]).to_csv(out_path, index=False)
+    print(f"  TRU: {len(rows)} linhas salvas -> {out_path.name}", flush=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -348,8 +433,9 @@ def main() -> None:
 
     print("=== download.py ===")
     download_cnt(force=args.force)
+    download_tru(force=args.force)
     download_siconfi(force=args.force)
-    print("=== concluído ===")
+    print("=== concluido ===")
 
 
 if __name__ == "__main__":

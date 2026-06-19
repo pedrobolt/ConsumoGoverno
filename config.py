@@ -21,6 +21,17 @@ for _d in [DATA_RAW, DATA_PROC, OUTPUT]:
 YEAR_START = 2015
 YEAR_END   = 2025
 
+# ── TRU (Tabela de Recursos e Usos) ───────────────────────────────────────────
+# SCN 2021 edition = last with non-zero component decomposition for govt.
+# When IBGE publishes the ref-2021 TRU, update TRU_EDITION and TRU_ZIP_URL here.
+# Unit in raw files: R$ 1 milhao (verified empirically -- divide by 1000 to R$ bi).
+TRU_EDITION = 2021
+TRU_ZIP_URL = (
+    "https://ftp.ibge.gov.br/Contas_Nacionais/Sistema_de_Contas_Nacionais/"
+    "2021/tabelas_xls/tabelas_de_recursos_e_usos/"
+    "TRU_resumo_2000_2021_xls.zip"
+)
+
 # ── Controle de esferas ───────────────────────────────────────────────────────
 # Municípios (capitais) representam ~27% da cobertura fiscal subnacional.
 # Mantenha False em primeiras execuções; True ativa os candidatos "munic_*".

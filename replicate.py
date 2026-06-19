@@ -25,7 +25,9 @@ import pandas as pd
 
 from config import (
     DATA_PROC,
+    DATA_RAW,
     OUTPUT,
+    TRU_EDITION,
     YEAR_END,
     YEAR_START,
     active_composites,
@@ -288,29 +290,116 @@ def build_tabela2(best_comp: dict, cnt: pd.DataFrame) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tabela 3 — representatividade anual
+# Tabela 3 — representatividade por componente vs TRU (SCN anual)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_tabela3(best_comp: dict, cnt: pd.DataFrame) -> pd.DataFrame:
-    benchmarks = _annual_benchmarks(cnt)
-    composite_df = _build_composite(best_comp["blocks"])
-    if composite_df is None:
+def _load_tru() -> pd.DataFrame:
+    """Load parsed TRU government components from data/raw/tru_governo.csv."""
+    path = DATA_RAW / "tru_governo.csv"
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.read_csv(path)
+
+
+def _tru_numerators() -> dict[str, pd.Series]:
+    """
+    Build annual numerator series per TRU component, summing atomic blocks
+    across all active spheres.
+
+    remuneracoes_sal_ce : all salarios_ce_sem_intra blocks, preferring liq_efetiva
+                          stage when both stages exist for a sphere.
+    contrib_imputadas   : all contrib_imputadas blocks (liquidado only).
+    """
+    specs = active_specs()
+
+    # sal: prefer lef over liq for each sphere
+    sal_by_sphere: dict[str, str] = {}
+    for s in specs:
+        if s["component"] == "salarios_ce_sem_intra":
+            sphere = s["sphere"]
+            if sphere not in sal_by_sphere or s["stage"] == "liq_efetiva":
+                sal_by_sphere[sphere] = s["name"]
+
+    ci_blocks = [s["name"] for s in specs if s["component"] == "contrib_imputadas"]
+
+    result: dict[str, pd.Series] = {}
+    for comp_key, block_names in [
+        ("remuneracoes_sal_ce", list(sal_by_sphere.values())),
+        ("contrib_imputadas",   ci_blocks),
+    ]:
+        frames = []
+        for name in block_names:
+            df = _load_block(name)
+            if df is not None:
+                frames.append(df.set_index(["ano", "trimestre"])["valor_bilhoes"])
+        if not frames:
+            continue
+        total = frames[0]
+        for f in frames[1:]:
+            total = total.add(f, fill_value=0.0)
+        result[comp_key] = (
+            total.reset_index()
+            .groupby("ano")["valor_bilhoes"]
+            .sum()
+        )
+
+    return result
+
+
+def build_tabela3() -> pd.DataFrame:
+    """
+    Representatividade of each indicator component vs TRU government totals.
+
+    Denominator : TRU SCN-2021 (data/raw/tru_governo.csv), years 2015-TRU_EDITION.
+    Numerator   : atomic blocks summed across active spheres, by component type.
+    Coverage    : years with published TRU only; 2022+ omitted (no TRU data).
+
+    Returns DataFrame: ano, componente, valor_ibge_tru_bilhoes,
+                       valor_amostra_bilhoes, representatividade_pct
+    """
+    tru = _load_tru()
+    if tru.empty:
+        print("  WARN: data/raw/tru_governo.csv nao encontrado -- "
+              "execute python download.py primeiro", flush=True)
         return pd.DataFrame()
 
-    ind_annual = composite_df.groupby("ano")["valor_bilhoes"].sum()
+    numerators = _tru_numerators()
+    if not numerators:
+        return pd.DataFrame()
+
     rows = []
-    for ano, ind_val in ind_annual.items():
-        b = benchmarks.get(ano)
-        if b and b > 0:
-            rows.append(
-                {
-                    "ano":                    int(ano),
-                    "indicador_bilhoes":      float(ind_val),
-                    "cnt_bilhoes":            float(b),
-                    "representatividade_pct": float(ind_val / b * 100),
-                }
-            )
-    return pd.DataFrame(rows).sort_values("ano").reset_index(drop=True)
+    for _, tru_row in tru.iterrows():
+        ano  = int(tru_row["ano"])
+        comp = tru_row["componente"]
+        tru_val = float(tru_row["governo_bilhoes"])
+
+        if comp not in numerators:
+            continue
+        num_series = numerators[comp]
+        if ano not in num_series.index:
+            continue
+        num_val = float(num_series.loc[ano])
+        if tru_val <= 0:
+            continue
+
+        nota = ""
+        if comp == "remuneracoes_sal_ce" and ano <= 2017:
+            nota = "RP indisponivel no SICONFI"
+
+        rows.append({
+            "ano":                    ano,
+            "componente":             comp,
+            "valor_ibge_tru_bilhoes": round(tru_val, 3),
+            "valor_amostra_bilhoes":  round(num_val, 3),
+            "representatividade_pct": round(num_val / tru_val * 100, 2),
+            "nota":                   nota,
+        })
+
+    return (
+        pd.DataFrame(rows)
+        .sort_values(["ano", "componente"])
+        .reset_index(drop=True)
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -383,12 +472,17 @@ def main() -> None:
         tab2.to_csv(out, index=False)
         print(f"  tabela2_desvios.csv: {len(tab2)} trimestres")
 
-    tab3 = build_tabela3(best_comp, cnt)
+    tab3 = build_tabela3()
     if not tab3.empty:
         out = OUTPUT / "tabela3_repres.csv"
         tab3.to_csv(out, index=False)
-        print(f"  tabela3_repres.csv: {len(tab3)} anos")
-        print(f"  Representatividade média: {tab3['representatividade_pct'].mean():.1f}%")
+        n_years = tab3["ano"].nunique()
+        print(f"  tabela3_repres.csv: {len(tab3)} linhas ({n_years} anos, "
+              f"TRU {YEAR_START}-{TRU_EDITION})")
+        for _, r in tab3.iterrows():
+            print(f"    {r['ano']} {r['componente']}: "
+                  f"{r['valor_amostra_bilhoes']:.1f} / {r['valor_ibge_tru_bilhoes']:.1f} "
+                  f"= {r['representatividade_pct']:.1f}%")
 
     plot_best_series(tab2)
     print("=== concluído ===")
