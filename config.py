@@ -21,6 +21,11 @@ for _d in [DATA_RAW, DATA_PROC, OUTPUT]:
 YEAR_START = 2015
 YEAR_END   = 2025
 
+# União RPPS (Anexo 04.2 civis + 04.3 militares) indisponível em 2015 no
+# SICONFI (verificado: API retorna 0 rows para an_exercicio=2015). Dados
+# existem a partir de 2016. Para 2015 contrib_imputadas reflete apenas estados.
+RPPS_UNIAO_START_YEAR = 2016
+
 # ── TRU (Tabela de Recursos e Usos) ───────────────────────────────────────────
 # SCN 2021 edition = last with non-zero component decomposition for govt.
 # When IBGE publishes the ref-2021 TRU, update TRU_EDITION and TRU_ZIP_URL here.

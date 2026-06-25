@@ -379,7 +379,7 @@ def build_tabela3() -> pd.DataFrame:
         if ano not in num_series.index:
             continue
         num_val = float(num_series.loc[ano])
-        if tru_val <= 0:
+        if tru_val <= 0 or num_val <= 0:
             continue
 
         nota = ""

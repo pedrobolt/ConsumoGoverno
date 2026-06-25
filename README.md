@@ -121,8 +121,9 @@ python replicate.py         # desagrega, rankeia, gera tabelas e gráfico
 - **CNT (benchmark):** IBGE, Tab_Compl_CNT.zip — coluna "Consumo do Governo",
   valores correntes e índice de volume (base 2010=100).
 - **SICONFI RREO:** Tesouro Nacional, apidatalake.tesouro.gov.br/ords/siconfi/tt/rreo
-  — Anexo 1 (Pessoal/GND, `no_co_tipo_demonstrativo="RREO - Anexo 1"`) e
-  Anexo 4 (RPPS/contrib. imputadas, `no_co_tipo_demonstrativo="RREO - Anexo 4"`).
+  — Anexo 1 (Pessoal/GND) e Anexo 04.2 + 04.3 (RPPS União: civis e militares).
+  Baixado separadamente em `data/raw/rreo_rpps_uniao.csv` via `download_siconfi_rpps_uniao()`.
+  Estados: contribuição patronal (`ReceitaDeContribuicoesPatronalFinanceiro`, Anexo 4).
 - **TRU (denominador Tabela 3):** IBGE, SCN edicao 2021,
   `TRU_resumo_2000_2021_xls.zip` — coluna "Administracao publica" (detectada
   dinamicamente via linha de contribuicoes imputadas dos empregadores).
@@ -156,11 +157,13 @@ padrão), cada uma somando blocos atômicos antes do Denton.
 
 \* Ativadas com `INCLUDE_MUNICIPIOS = True`.
 
-**Assimetria entre esferas:** `uniao_only` inclui contribuições imputadas
-(RPPS federal, extraídas do Anexo 4), porque a União reporta esses dados
-diretamente nesse anexo e são parte das remunerações na CNT. Os composites
-de Estados usam o Anexo 4 estadual somente em `uniao_estados_ci`, onde o
-efeito pode ser testado diretamente contra a versão sem contrib.imputadas.
+**Contrib. imputadas: cobertura parcial.** SICONFI Anexo 04.2/04.3 da União
+só expõe Resultado RPPS para militares (2018-2020) e civis (2023+). Estados
+RPPS disponível a partir de 2021. Cobertura plena (~100% da TRU) exigiria
+fontes não disponíveis via API pública (SIAFI, Portal da Transparência —
+testado e bloqueado por controle de acesso). Configurável: `RPPS_UNIAO_START_YEAR`
+e `RPPS_UNIAO_ANEXOS` em `config.py`. Quando novos sub-anexos forem adicionados
+ao SICONFI, basta incluí-los na lista.
 
 **Resultado empírico (2015-2025, 44 trimestres, INCLUDE_MUNICIPIOS=False):**
 
@@ -170,9 +173,9 @@ efeito pode ser testado diretamente contra a versão sem contrib.imputadas.
 | 2 | `estados_only` | 13,6 | 2,67% | 0,992 |
 | 3 | `estados_only_com_intra` | 13,9 | 2,57% | 0,992 |
 | 4 | `uniao_estados_lef` | 14,0 | 2,69% | 0,992 |
-| 5 | `uniao_estados_ci` | 15,5 | 2,70% | 0,990 |
-| 6 | `uniao_estados` | 15,9 | 2,75% | 0,989 |
-| 7 | `uniao_only` | 65,3 | 9,13% | 0,835 |
+| 5 | `uniao_estados` | 15,9 | 2,75% | 0,989 |
+| 6 | `uniao_estados_ci` | 16,9 | 2,96% | 0,988 |
+| 7 | `uniao_only` | 65,3 | 9,15% | 0,834 |
 
 A série selecionada (`estados_only_lef`) usa GND1 sem intra-orçamentárias,
 estágio `liq_efetiva` (liquidado + RP Processados Pagos), esfera estados.
@@ -197,6 +200,9 @@ na TRU "governo geral" (coluna Administração Pública). O numerador usa
 | 2019 | remuneracoes_sal_ce   | 990,2       | 953,3           | 96,3%     |
 | 2020 | remuneracoes_sal_ce   | 1.028,9     | 960,9           | 93,4%     |
 | 2021 | remuneracoes_sal_ce   | 1.076,9     | 988,4           | 91,8%     |
+| 2018 | contrib_imputadas     | 96,8        | 19,1            | 19,7%     |
+| 2019 | contrib_imputadas     | 105,1       | 47,0            | 44,7%     |
+| 2020 | contrib_imputadas     | 97,8        | 44,9            | 45,9%     |
 | 2021 | contrib_imputadas     | 100,6       | 33,5            | 33,3%     |
 
 Desvios em relação ao artigo original na Tabela 3:
@@ -204,7 +210,7 @@ Desvios em relação ao artigo original na Tabela 3:
 | Aspecto | Artigo (2015) | Este projeto |
 |---------|--------------|--------------|
 | Remunerações | Separado: sal. + contrib. efetivas | GND1 sem intra (SICONFI não separa) |
-| Contrib. imputadas | Cobertura plena U+E | Só estados, só 2021 (União não reporta no SICONFI; estados só a partir de 2021) |
+| Contrib. imputadas | Cobertura plena U+E | Parcial: militares 2018-2020, civis 2023+ (União); estados 2021+ (ver nota abaixo) |
 | Cobertura TRU | 2010-2014 | 2015-2021 (TRU SCN-2021) |
 
 **Lacuna RP Processados Pagos (2015-2017):** A representatividade de
@@ -217,8 +223,4 @@ pre/pos-2018) porque usa apenas o perfil sazonal, nao o nivel.
 As linhas de 2015-2017 em `tabela3_repres.csv` trazem a nota
 "RP indisponivel no SICONFI" na coluna `nota`.
 
-**Lacuna contrib_imputadas:** SICONFI Anexo 4 nao retorna dados de
-`ReceitaDeContribuicoesPatronalFinanceiro` para a Uniao nem para estados
-antes de 2021. A cobertura de 33,3% em 2021 reflete apenas os estados
-(sem Uniao), que e a maior componente das contribuicoes imputadas.
 

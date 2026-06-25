@@ -41,9 +41,10 @@ BIM_WEIGHTS: dict[int, dict[int, float]] = {
 }
 
 # ── Verified SICONFI coluna labels ────────────────────────────────────────────
-_LIQ = "DESPESAS LIQUIDADAS NO BIMESTRE"
-_RP  = "RESTOS A PAGAR PROCESSADOS PAGOS (b)"
-_PAT = "RECEITAS REALIZADAS ATÉ O BIMESTRE (b)"   # cumulative YTD
+_LIQ       = "DESPESAS LIQUIDADAS NO BIMESTRE"
+_RP        = "RESTOS A PAGAR PROCESSADOS PAGOS (b)"
+_PAT       = "RECEITAS REALIZADAS ATÉ O BIMESTRE (b)"    # cumulative YTD (estados patronal)
+_ACUM_DESP = "DESPESAS LIQUIDADAS ATÉ O BIMESTRE (acum)" # cumulative YTD (União RPPS Resultado)
 
 # ── Filters: (cod_conta, coluna) pairs per component × flow-type ──────────────
 COMPONENT_FILTER: dict[str, dict] = {
@@ -63,9 +64,20 @@ COMPONENT_FILTER: dict[str, dict] = {
         "rp":        [("RREO6OutrasDespesasCorrentes", _RP)],
     },
     "contrib_imputadas": {
-        # ReceitaDeContribuicoesPatronalFinanceiro is cumulative year-to-date;
-        # _ytd_to_flow() converts it to bimestral flows before the bim→quarter step.
-        "patronal_ytd": [("ReceitaDeContribuicoesPatronalFinanceiro", _PAT)],
+        # Estados: patronal receipts as proxy (cumulative YTD).
+        "patronal_ytd": [
+            ("ReceitaDeContribuicoesPatronalFinanceiro",    _PAT),
+            ("ReceitaDeContribuicoesPatronalPrevidenciario", _PAT),
+        ],
+        # União: Resultado rows from rreo_rpps_uniao.csv (cumulative YTD).
+        # Resultado = receitas − despesas; typically negative (deficit).
+        # contrib_imputada = −Resultado → negate before _ytd_to_flow().
+        "resultado_ytd": [
+            ("RREO4ResultadoRPPSPrevidenciario", _ACUM_DESP),  # 04.2 civis
+            ("ResultadoRPPSPrevidenciarioFCDF",  _ACUM_DESP),  # 04.2 FCDF
+            ("RREO4ResultadoRPPSFinanceiro",     _ACUM_DESP),  # 04.3 pensões militares
+            ("ResultadoInativosMilitares",        _ACUM_DESP),  # 04.3 inativos militares
+        ],
     },
 }
 
@@ -169,14 +181,23 @@ def _extract_bimestral(
     df_raw: pd.DataFrame,
     component: str,
     stage: str,
+    sphere: str = "",
 ) -> pd.DataFrame:
     """
-    Extract a bimestral flow series for one (component, stage).
+    Extract a bimestral flow series for one (component, stage, sphere).
     Returns DataFrame: ano, bimestre, valor (sum across all entities in df_raw).
     """
     spec_map = COMPONENT_FILTER[component]
 
     if component == "contrib_imputadas":
+        if sphere == "uniao":
+            # df_raw is rreo_rpps_uniao.csv — sum Resultado rows, negate (deficit→positive)
+            ytd = _filter_sum(df_raw, spec_map["resultado_ytd"])
+            if not ytd.empty:
+                ytd = ytd.copy()
+                ytd["valor"] = -ytd["valor"]
+            return _ytd_to_flow(ytd)
+        # estados/municipios: use patronal receipts as proxy
         ytd = _filter_sum(df_raw, spec_map["patronal_ytd"])
         return _ytd_to_flow(ytd)
 
@@ -198,14 +219,14 @@ def _extract_bimestral(
     )
 
 
-def build_block(spec: dict, df_raw: pd.DataFrame) -> pd.DataFrame:
+def build_block(spec: dict, df_raw: pd.DataFrame, sphere: str = "") -> pd.DataFrame:
     """
     Build the quarterly indicator series for one atomic block spec.
 
     Returns DataFrame: ano, trimestre, valor_bilhoes (R$ bilhões).
     Values are converted from R$ (raw SICONFI) to R$ bilhões to match CNT units.
     """
-    bim = _extract_bimestral(df_raw, spec["component"], spec["stage"])
+    bim = _extract_bimestral(df_raw, spec["component"], spec["stage"], sphere=sphere)
     bim = bim[bim["ano"].between(YEAR_START, YEAR_END)]
     qtly = _bim_to_quarterly(bim)
     qtly["valor_bilhoes"] = qtly["valor"] / 1e9
@@ -244,19 +265,35 @@ def main() -> None:
         "municipios": _load_raw("municipios") if INCLUDE_MUNICIPIOS else pd.DataFrame(),
     }
 
+    # Load União RPPS Resultado data (Anexo 04.2 + 04.3); optional — if absent,
+    # uniao contrib_imputadas falls back to empty (zero) as before.
+    rpps_uniao_path = DATA_RAW / "rreo_rpps_uniao.csv"
+    if rpps_uniao_path.exists():
+        raw["uniao_rpps"] = pd.read_csv(rpps_uniao_path, dtype={"cod_ibge": str})
+        print(f"  rreo_rpps_uniao.csv: {len(raw['uniao_rpps'])} linhas carregadas")
+    else:
+        raw["uniao_rpps"] = pd.DataFrame()
+        print("  WARN: rreo_rpps_uniao.csv nao encontrado — "
+              "execute python download.py para baixar RPPS União")
+
     specs = active_specs()
     print(f"  {len(specs)} blocos atômicos ativos")
 
     for spec in specs:
         sphere = spec["sphere"]
-        df_raw = raw.get(sphere, pd.DataFrame())
+
+        # Route uniao contrib_imputadas to the dedicated RPPS file
+        if sphere == "uniao" and spec["component"] == "contrib_imputadas":
+            df_raw = raw.get("uniao_rpps", pd.DataFrame())
+        else:
+            df_raw = raw.get(sphere, pd.DataFrame())
 
         if df_raw.empty:
             print(f"  SKIP {spec['name']} — sem dados para esfera '{sphere}'")
             continue
 
         try:
-            quarterly = build_block(spec, df_raw)
+            quarterly = build_block(spec, df_raw, sphere=sphere)
         except Exception as exc:
             print(f"  ERRO {spec['name']}: {exc}", file=sys.stderr)
             continue
