@@ -23,6 +23,7 @@ CLAUDE.md
 .DS_Store
 Thumbs.db
 desktop.ini
+*.bin
 
 # editor
 .vscode/

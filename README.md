@@ -100,10 +100,27 @@ output/              — resultados finais (não versionados)
 ```bash
 pip install -r requirements.txt
 
-python download.py          # baixa dados brutos (~10–20 min na primeira vez)
-python build_indicators.py  # constrói grade de candidatos
-python replicate.py         # desagrega, rankeia, gera tabelas e gráfico
+python download.py          # baixa CNT (IBGE), TRU, RREO Anexo 1 e RPPS União 04.2/04.3
+python build_indicators.py  # constrói grade de candidatos → data/processed/
+python replicate.py         # desagrega (Denton), rankeia, gera tabelas e gráfico
+python deflate.py           # série real: deflator implícito CNT → output/serie_real.csv
 ```
+
+As saídas em `output/` não são versionadas (ver `.gitignore`). Reexecute os quatro
+scripts acima para regenerá-las do zero a partir dos dados brutos.
+
+## Configuração
+
+Todos os parâmetros relevantes estão em `config.py`:
+
+| Constante | Padrão | Quando alterar |
+|-----------|--------|----------------|
+| `TRU_EDITION` | `2021` | Quando o IBGE publicar o SCN de referência 2021 com TRU não-nula por componente de governo. Atualizar também `TRU_ZIP_URL`. |
+| `TRU_ZIP_URL` | URL IBGE SCN 2021 | Par com `TRU_EDITION` — aponta para o ZIP da edição corrente. |
+| `RPPS_UNIAO_START_YEAR` | `2016` | Se o SICONFI retroagir dados de Anexo 04.2/04.3 para antes de 2016. |
+| `RPPS_UNIAO_ANEXOS` | `["RREO-Anexo 04.2", "RREO-Anexo 04.3"]` | Se o SICONFI adicionar novos sub-anexos RPPS (ex.: 04.5). Basta incluir na lista. |
+| `INCLUDE_MUNICIPIOS` | `False` | `True` ativa os 27 municípios-capital. Piora o MSE no período atual (ver nota Municípios). |
+| `YEAR_START` / `YEAR_END` | `2015` / `2025` | Ajustar quando ampliar ou restringir o horizonte temporal. |
 
 ## Saídas
 

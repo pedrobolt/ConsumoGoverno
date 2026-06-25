@@ -26,6 +26,10 @@ YEAR_END   = 2025
 # existem a partir de 2016. Para 2015 contrib_imputadas reflete apenas estados.
 RPPS_UNIAO_START_YEAR = 2016
 
+# Sub-anexos do RPPS União a baixar. Quando o SICONFI adicionar novos sub-anexos
+# (ex.: 04.5), basta incluí-los aqui — nenhuma outra alteração necessária.
+RPPS_UNIAO_ANEXOS = ["RREO-Anexo 04.2", "RREO-Anexo 04.3"]
+
 # ── TRU (Tabela de Recursos e Usos) ───────────────────────────────────────────
 # SCN 2021 edition = last with non-zero component decomposition for govt.
 # When IBGE publishes the ref-2021 TRU, update TRU_EDITION and TRU_ZIP_URL here.

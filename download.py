@@ -35,6 +35,7 @@ from config import (
     YEAR_END,
     YEAR_START,
     RPPS_UNIAO_START_YEAR,
+    RPPS_UNIAO_ANEXOS,
 )
 
 # ── SICONFI ───────────────────────────────────────────────────────────────────
@@ -73,8 +74,6 @@ CNT_COL_PERIODO = 0
 # "Resultado" rows = receitas − despesas; negative when in deficit.
 # contrib_imputada = −Resultado (negate so deficit → positive imputed contribution).
 # NOTE: 2015 returns 0 rows from SICONFI (verified via API probe); gap documented.
-RPPS_UNIAO_ANEXOS = ["RREO-Anexo 04.2", "RREO-Anexo 04.3"]
-
 RPPS_UNIAO_RESULTADO_CONTAS = {
     "RREO4ResultadoRPPSPrevidenciario",   # civis federal (04.2 from 2023+)
     "ResultadoRPPSPrevidenciarioFCDF",    # servidores distritais FCDF (04.2 from 2023+)
