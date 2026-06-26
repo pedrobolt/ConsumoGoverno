@@ -431,6 +431,37 @@ def plot_best_series(tab2: pd.DataFrame) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Brazilian-locale CSV writer
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _write_br_csv(df: pd.DataFrame, path, col_formats: dict) -> None:
+    """
+    Write a CSV with Brazilian locale formatting:
+      - field separator ";" (Excel BR auto-detects this)
+      - decimal separator "," for numeric columns
+      - percentage columns stored as "2,36%" strings
+
+    col_formats: {col_name: dp_int | "pct"}
+      dp_int → round to dp decimal places, write with "," as decimal
+      "pct"  → round to 2dp, append "%" → "2,36%"
+    """
+    out = df.copy()
+    for col, fmt in col_formats.items():
+        if col not in out.columns:
+            continue
+        if fmt == "pct":
+            out[col] = out[col].apply(
+                lambda x: f"{x:.2f}%".replace(".", ",") if pd.notna(x) else ""
+            )
+        else:
+            dp = int(fmt)
+            out[col] = out[col].apply(
+                lambda x, dp=dp: f"{x:.{dp}f}".replace(".", ",") if pd.notna(x) else ""
+            )
+    out.to_csv(path, sep=";", index=False)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -448,7 +479,7 @@ def main() -> None:
         print("WARN: nenhum composite processado — verifique data/processed/")
     else:
         out = OUTPUT / "ranking.csv"
-        ranking.to_csv(out, index=False)
+        _write_br_csv(ranking, out, {"mse": 1, "rmse": 1, "mape": "pct", "corr": 4})
         print(f"\n  ranking.csv ({len(ranking)} composites):")
         print(ranking[["rank", "composite", "rmse", "mape", "corr"]].to_string(index=False))
 
@@ -456,7 +487,7 @@ def main() -> None:
     diag = rank_blocks_diagnostic(cnt)
     if not diag.empty:
         out = OUTPUT / "diagnostico_blocos.csv"
-        diag.to_csv(out, index=False)
+        _write_br_csv(diag, out, {"mse": 1, "rmse": 1, "mape": "pct", "corr": 4})
         print(f"  diagnostico_blocos.csv: {len(diag)} blocos")
 
     if ranking.empty:
@@ -469,13 +500,19 @@ def main() -> None:
     tab2 = build_tabela2(best_comp, cnt)
     if not tab2.empty:
         out = OUTPUT / "tabela2_desvios.csv"
-        tab2.to_csv(out, index=False)
+        _write_br_csv(tab2, out, {
+            "consumo_governo_bilhoes": 2, "estimado_bilhoes": 2,
+            "desvio_bilhoes": 2, "desvio_pct": "pct",
+        })
         print(f"  tabela2_desvios.csv: {len(tab2)} trimestres")
 
     tab3 = build_tabela3()
     if not tab3.empty:
         out = OUTPUT / "tabela3_repres.csv"
-        tab3.to_csv(out, index=False)
+        _write_br_csv(tab3, out, {
+            "valor_ibge_tru_bilhoes": 2, "valor_amostra_bilhoes": 2,
+            "representatividade_pct": "pct",
+        })
         n_years = tab3["ano"].nunique()
         print(f"  tabela3_repres.csv: {len(tab3)} linhas ({n_years} anos, "
               f"TRU {YEAR_START}-{TRU_EDITION})")

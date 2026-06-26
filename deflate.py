@@ -36,7 +36,7 @@ def build_serie_real() -> pd.DataFrame:
             "ERROR: output/tabela2_desvios.csv não encontrado. "
             "Execute python replicate.py primeiro."
         )
-    tab2 = pd.read_csv(tab2_path)
+    tab2 = pd.read_csv(tab2_path, sep=";", decimal=",")
 
     cnt_path = DATA_PROC / "cnt_benchmark.csv"
     if not cnt_path.exists():
@@ -81,11 +81,31 @@ def build_serie_real() -> pd.DataFrame:
     ]]
 
 
+def _write_br_csv(df: pd.DataFrame, path, col_formats: dict) -> None:
+    out = df.copy()
+    for col, fmt in col_formats.items():
+        if col not in out.columns:
+            continue
+        if fmt == "pct":
+            out[col] = out[col].apply(
+                lambda x: f"{x:.2f}%".replace(".", ",") if pd.notna(x) else ""
+            )
+        else:
+            dp = int(fmt)
+            out[col] = out[col].apply(
+                lambda x, dp=dp: f"{x:.{dp}f}".replace(".", ",") if pd.notna(x) else ""
+            )
+    out.to_csv(path, sep=";", index=False)
+
+
 def main() -> None:
     print("=== deflate.py ===")
     df = build_serie_real()
     out = OUTPUT / "serie_real.csv"
-    df.to_csv(out, index=False)
+    _write_br_csv(df, out, {
+        "estimado_bilhoes": 2, "deflator_implicito": 4,
+        "real_idx_1995": 2, "variacao_aa_pct": "pct",
+    })
     print(f"  serie_real.csv: {len(df)} trimestres -> {out}")
 
     recent = df.dropna(subset=["variacao_aa_pct"]).tail(8)
