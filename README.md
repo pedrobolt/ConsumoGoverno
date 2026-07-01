@@ -16,13 +16,6 @@ de Denton (1971).
 com uma base de dados diferente; os números da Tabela 2 original não são
 numericamente reproduzíveis aqui — o que se replica é a *metodologia*.
 
-## O que este projeto NÃO é
-
-Este projeto testa a **metodologia** de Santos et al. (2015) sobre dados 2015–2025.
-**Não reproduz numericamente** o Anexo I do artigo nem a Tabela 2: os dados são
-diferentes (SICONFI vs Finbra/EOE, 2015–2025 vs 2010–2014). Qualquer
-correspondência numérica com os resultados originais é coincidência, não validação.
-
 ## Desvios e limitações em relação ao artigo original
 
 | Aspecto | Artigo (2015) | Este projeto |
