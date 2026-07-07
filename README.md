@@ -82,6 +82,7 @@ build_indicators.py  — raw → séries trimestrais por componente e candidato
 denton.py            — desagregação proporcional de Denton + helpers
 replicate.py         — roda a grade, rankeia por MSE, gera tabelas e gráfico
 deflate.py           — série real: deflator implícito CNT + crescimento a/a
+nowcast.py           — Chow-Lin AR(1) para trimestres sem CNT publicada (extensão)
 
 data/raw/            — dados brutos baixados (não versionados)
 data/processed/      — séries trimestrais intermediárias
@@ -97,10 +98,12 @@ python download.py          # baixa CNT (IBGE), TRU, RREO Anexo 1 e RPPS União 
 python build_indicators.py  # constrói grade de candidatos → data/processed/
 python replicate.py         # desagrega (Denton), rankeia, gera tabelas e gráfico
 python deflate.py           # série real: deflator implícito CNT → output/serie_real.csv
+python nowcast.py           # nowcast Chow-Lin para trimestres sem CNT (extensão)
 ```
 
 As saídas em `output/` não são versionadas (ver `.gitignore`). Reexecute os quatro
-scripts acima para regenerá-las do zero a partir dos dados brutos.
+primeiros scripts acima para regenerá-las do zero a partir dos dados brutos.
+`nowcast.py` produz estimativas provisórias; ver seção Nowcast abaixo.
 
 ## Configuração
 
@@ -125,6 +128,8 @@ Todos os parâmetros relevantes estão em `config.py`:
 | `output/tabela3_repres.csv` | Representatividade dos componentes vs TRU anual (Tabela 3) |
 | `output/serie_real.csv` | Série deflacionada + crescimento real a/a |
 | `output/fig_serie.png` | Melhor série vs CNT — linha (Gráfico 1) |
+| `output/nowcast.csv` | Estimativas Chow-Lin para trimestres sem CNT (extensão) |
+| `output/vintage_nowcast.csv` | Log append-only de todas as rodadas de nowcast |
 
 ## Fontes de dados
 
@@ -232,5 +237,85 @@ O Denton nao e afetado por essa lacuna (MAPE sem quebra estrutural
 pre/pos-2018) porque usa apenas o perfil sazonal, nao o nivel.
 As linhas de 2015-2017 em `tabela3_repres.csv` trazem a nota
 "RP indisponivel no SICONFI" na coluna `nota`.
+
+## Nowcast (extensão, não replicação)
+
+**Este módulo NÃO faz parte da replicação de Santos et al. (2015).** Os valores
+produzidos por `nowcast.py` são estimativas provisórias para trimestres sem CNT
+publicada e serão revisados — sem aviso — quando o IBGE publicar os dados oficiais.
+O registro histórico de todas as estimativas e seus erros ex-post está em
+`output/vintage_nowcast.csv` (append-only; nunca sobrescreve rodadas anteriores).
+
+### Método
+
+**Chow-Lin AR(1) GLS** com rho estimado por máxima verossimilhança (perfil), mais
+correção sazonal ex-post. Especificação vencedora de um horse race de 8 combinações
+(2 métodos × 2 amostras × 2 correções) por validação pseudo-fora-da-amostra:
+
+- **Indicador:** `estados_only_lef` (GND1 sem intra, liq_efetiva, 27 estados)
+- **Treinamento:** anos com CNT anual completa, excluindo 2020 (quebra estrutural COVID)
+- **rho:** estimado por MV a cada rodada (~0,84 no período 2015–2025)
+- **Correção sazonal:** ajuste ex-post multiplicativo por trimestre, usando o desvio
+  médio histórico da série Denton (tabela2_desvios.csv). Não é dummy dentro da
+  regressão — é pós-estimação.
+
+### Acurácia pseudo-fora-da-amostra (horse race completo)
+
+Protocolo rolling-origin: treina até ano T, prevê todos os 4 trimestres de T+1.
+Origens: 2022→2023, 2023→2024, 2024→2025. CNT de 2023-2025 disponível para comparação.
+
+| Especificação | MAPE 2023 | MAPE 2024 | MAPE 2025 | **Média** |
+|---------------|-----------|-----------|-----------|-----------|
+| **CL_ex2020_sbias** ✓ | 2,94% | 1,58% | 2,51% | **2,34%** |
+| CL_sbias | 3,38% | 1,49% | 2,74% | 2,54% |
+| CL_ex2020 | 3,62% | 1,42% | 3,16% | 2,73% |
+| CL (base) | 3,97% | 1,41% | 3,39% | 2,93% |
+| FZ_ex2020_sbias | 7,76% | 2,91% | 5,91% | 5,52% |
+| FZ_sbias | 8,18% | 3,33% | 6,27% | 5,93% |
+| FZ_ex2020 | 8,46% | 3,44% | 6,58% | 6,16% |
+| FZ (base) | 8,89% | 3,93% | 6,95% | 6,59% |
+
+CL = Chow-Lin AR(1) MLE; FZ = Fernandez (passeio aleatório); sbias = correção sazonal;
+ex2020 = exclui 2020 do treinamento.
+
+Fernandez foi descartado: MAPE 2-3× maior, com erro sistemático de Q4 de -11% a -18%
+(o passeio aleatório não acomoda o pico de gasto de dezembro do governo).
+
+### Erros por trimestre — especificação vencedora
+
+O erro varia significativamente por trimestre. **Q2 e Q4 têm incerteza ~2-3× maior
+que Q1.** Planeje análises sensíveis com margens de erro distintas por trimestre.
+
+| Ano teste | rho | Q1 | Q2 | Q3 | Q4 | MAPE |
+|-----------|-----|----|----|----|----|------|
+| 2023 | 0,8445 | +0,14% | **-4,00%** | -2,11% | **-5,53%** | 2,94% |
+| 2024 | 0,8340 | -2,38% | +1,02% | -0,38% | +2,56% | 1,58% |
+| 2025 | 0,8372 | +0,61% | **-3,36%** | **-3,67%** | -2,39% | 2,51% |
+| **Média** | **0,84** | **-0,54%** | **-2,11%** | **-2,05%** | **-1,79%** | **2,34%** |
+| **\|Média\|** | | **1,04%** | **2,79%** | **2,05%** | **3,49%** | |
+
+Erro médio absoluto por trimestre: Q1 ≈ 1%, Q2 ≈ 3%, Q3 ≈ 2%, Q4 ≈ 3,5%.
+
+### Atenção: erros pseudo-OOS vs erros em tempo real
+
+Os erros acima foram medidos com **dados completos e revisados do indicador**
+(todos os bimestres disponíveis, versão final do SICONFI). Nowcasts em tempo real
+sobre trimestres parciais (`indicador_parcial=True` em `nowcast.csv`) terão erros
+maiores, pois dependem de uma escala histórica que não captura revisões do indicador.
+
+`vintage_nowcast.csv` é o registro autoritativo da acurácia real: cada rodada é
+gravada com a data da estimativa, e o erro ex-post se computa automaticamente quando
+a CNT publica os valores oficiais.
+
+### Como usar
+
+1. Atualize `YEAR_END` em `config.py` para o ano corrente.
+2. Reexecute `download.py` e `build_indicators.py`.
+3. Execute `python nowcast.py`.
+
+O script detecta automaticamente quais trimestres não têm CNT publicada e os nowcasta.
+Trimestres com indicador parcial (bimestres do trimestre ainda não publicados pelo
+SICONFI) são escalados por razão histórica bimestre/trimestre e sinalizados com
+`indicador_parcial=True`.
 
 

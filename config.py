@@ -3,6 +3,7 @@ Configurações centrais do projeto — consumo nominal do governo, método Sant
 
 Edite aqui para adicionar/remover candidatos, entidades ou horizonte temporal.
 """
+from datetime import date as _date
 from pathlib import Path
 
 # ── Diretórios ────────────────────────────────────────────────────────────────
@@ -16,10 +17,8 @@ for _d in [DATA_RAW, DATA_PROC, OUTPUT]:
 
 # ── Horizonte temporal ────────────────────────────────────────────────────────
 # SICONFI RREO disponível desde 2015; CNT usada como benchmark anual.
-# Este projeto replica a metodologia sobre dados 2015–2025, não os números
-# da Tabela 2 do artigo original (que cobria 2010–2014 com outra base).
 YEAR_START = 2015
-YEAR_END   = 2025
+YEAR_END   = _date.today().year  # auto-advances each calendar year; no manual edit needed
 
 # União RPPS (Anexo 04.2 civis + 04.3 militares) indisponível em 2015 no
 # SICONFI (verificado: API retorna 0 rows para an_exercicio=2015). Dados
