@@ -116,7 +116,8 @@ Todos os parâmetros relevantes estão em `config.py`:
 | `RPPS_UNIAO_START_YEAR` | `2016` | Se o SICONFI retroagir dados de Anexo 04.2/04.3 para antes de 2016. |
 | `RPPS_UNIAO_ANEXOS` | `["RREO-Anexo 04.2", "RREO-Anexo 04.3"]` | Se o SICONFI adicionar novos sub-anexos RPPS (ex.: 04.5). Basta incluir na lista. |
 | `INCLUDE_MUNICIPIOS` | `False` | `True` ativa os 27 municípios-capital. Piora o MSE no período atual (ver nota Municípios). |
-| `YEAR_START` / `YEAR_END` | `2015` / `2025` | Ajustar quando ampliar ou restringir o horizonte temporal. |
+| `YEAR_START` | `2015` | Ajustar se SICONFI retroagir dados anteriores a 2015. |
+| `YEAR_END` | `date.today().year` | Derivado automaticamente — avança em 1 janeiro sem edição manual. |
 
 ## Saídas
 
@@ -296,26 +297,83 @@ que Q1.** Planeje análises sensíveis com margens de erro distintas por trimest
 
 Erro médio absoluto por trimestre: Q1 ≈ 1%, Q2 ≈ 3%, Q3 ≈ 2%, Q4 ≈ 3,5%.
 
+### Três regimes — campo `regime` em `nowcast.csv`
+
+Cada trimestre estimado recebe um dos três valores:
+
+| `regime` | Quando ocorre | O que é projetado |
+|----------|---------------|-------------------|
+| **completo** | Todos os bimestres do trimestre publicados | Indicador observado diretamente |
+| **parcial** | Só parte dos bimestres disponível (ex.: bim2 mas não bim3 em Q2) | Indicador escalado por razão histórica bim/trimestre |
+| **projetado** | Nenhum bimestre do trimestre publicado ainda (ex.: Q3/Q4 em junho) | Indicador projetado via participação sazonal histórica, ancorado nos bimestres H1 observados |
+
+O regime `projetado` é revisado **automaticamente** em cada nova rodada: quando
+os bimestres chegam, o trimestre passa a `parcial` e depois a `completo`, sem
+intervenção manual.
+
+### Acurácia por regime
+
+**Regime completo/parcial** (horse race rolling-origin, indicador observado):
+
+| Trimestre | \|Erro médio\| |
+|-----------|----------------|
+| Q1 | ≈ 1,0% |
+| Q2 | ≈ 2,8% |
+| Q3 | ≈ 2,1% |
+| Q4 | ≈ 3,5% |
+| **Média** | **2,34%** |
+
+**Regime projetado** (pseudo-OOS mid-year, apenas bim1+2, indicador projetado):
+
+Protocolo: stand em junho de cada ano de teste, prevê Q3 e Q4 usando apenas bim1+2.
+Quatro métodos avaliados em janela de 6 anos (2019, 2021–2025; 2020 excluído por
+COVID; 2016–2018 excluídos por amostra de treino insuficiente < 4 anos). Vencedor:
+método B (participação sazonal + multiplicador LOO), menor MAPE e sem viés unilateral.
+
+| Método | MAPE Q3 | MAPE Q4 | Combinado | Sinal dos erros |
+|--------|---------|---------|-----------|-----------------|
+| A — participação sazonal (baseline) | 5,1% | 5,5% | 5,3% | mistos |
+| **B — A × multiplicador LOO** ✓ | **2,9%** | **5,0%** | **4,0%** | mistos |
+| C — SARIMA(1,1,1)(0,1,1,4) | 4,9% | 5,6% | 5,2% | mistos |
+| D — ARIMA não-sazonal ✗ | 5,2% | 8,9% | 7,1% | mistos |
+
+**Por que D foi eliminado:** ARIMA(1,1,2) sem componente sazonal extrapola a tendência
+recente e falha no pico de gastos de dezembro (Q4 MAPE = 8,9%, quase 2× pior que B).
+O SARIMA com `(P,D,Q,4)` captura o padrão anual; o ARIMA simples não consegue.
+
+O método A subestima sistematicamente o H2 (gastos de fim de ano dos estados não
+estão visíveis em bim1+2). O método B aplica multiplicadores empíricos por trimestre
+(`_PROJ_BIAS` em `nowcast.py`), validados por leave-one-out sobre a janela de 6 anos:
+
+| Trimestre | Multiplicador | Base empírica |
+|-----------|---------------|---------------|
+| Q3 | 1,061 | Média LOO excl. 2019 e 2020 (n=5, origens 2021–2025) |
+| Q4 | 1,053 | Média LOO excl. 2019 e 2020 (n=5, origens 2021–2025) |
+
+2019 excluído da média dos multiplicadores: apenas 4 anos de treino disponíveis,
+produzindo razão Q4 = 0,92 (outlier de amostra pequena; z = −1,94 na distribuição
+das 6 origens). Com 2019 incluído, a média Q4 cai para 1,031. Revisar anualmente:
+`vintage_nowcast.csv` acumula os erros ex-post quando a CNT publica os valores oficiais.
+
+`projetado` é ~1,5× menos preciso que `completo`. Q3 esperado ~3% (após correção);
+Q4 esperado ~5% (alta variância — o pico de dezembro é difícil de antecipar em junho).
+
 ### Atenção: erros pseudo-OOS vs erros em tempo real
 
-Os erros acima foram medidos com **dados completos e revisados do indicador**
-(todos os bimestres disponíveis, versão final do SICONFI). Nowcasts em tempo real
-sobre trimestres parciais (`indicador_parcial=True` em `nowcast.csv`) terão erros
-maiores, pois dependem de uma escala histórica que não captura revisões do indicador.
+Todos os erros acima foram medidos em retrospecto com dados revisados. Erros reais
+podem diferir por revisões do SICONFI e sazonalidades atípicas.
 
 `vintage_nowcast.csv` é o registro autoritativo da acurácia real: cada rodada é
-gravada com a data da estimativa, e o erro ex-post se computa automaticamente quando
-a CNT publica os valores oficiais.
+gravada com a data da estimativa e o regime, e o erro ex-post se computa
+automaticamente quando a CNT publica os valores oficiais.
 
 ### Como usar
 
-1. Atualize `YEAR_END` em `config.py` para o ano corrente.
-2. Reexecute `download.py` e `build_indicators.py`.
-3. Execute `python nowcast.py`.
+1. Execute `python download.py` e `python build_indicators.py` (se houver dados novos).
+2. Execute `python nowcast.py`.
 
-O script detecta automaticamente quais trimestres não têm CNT publicada e os nowcasta.
-Trimestres com indicador parcial (bimestres do trimestre ainda não publicados pelo
-SICONFI) são escalados por razão histórica bimestre/trimestre e sinalizados com
-`indicador_parcial=True`.
+`YEAR_END` em `config.py` é derivado automaticamente do ano calendário — não requer
+atualização manual. O script detecta automaticamente quais trimestres não têm CNT
+publicada, escolhe o regime adequado e nowcasta todos os trimestres restantes do ano.
 
 

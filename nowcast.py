@@ -45,6 +45,14 @@ _SANITY_PCT = 15.0          # warn if estimate differs > ±15% from same-Q last 
 # Quarter → contributing bimesters (from BIM_WEIGHTS)
 _Q_BIMS = {1: [1, 2], 2: [2, 3], 3: [4, 5], 4: [5, 6]}
 
+# Post-hoc bias multipliers for the 'projetado' regime.
+# Seasonal share systematically underestimates H2 state payroll (end-of-year bonuses
+# not yet visible in bim1+2). LOO-validated on 6-year pseudo-OOS (2019, 2021-2025);
+# 2019 excluded from mean (only 4 training years); 2020 excluded (COVID structural break).
+# Method B (seasonal share x LOO multiplier) won 4-method horse race (A/B/C/D);
+# D (non-seasonal ARIMA) eliminated: Q4 MAPE 8.9% vs B's 5.0% -- can't model Q4 spike.
+_PROJ_BIAS = {3: 1.061, 4: 1.053}
+
 
 # ── Chow-Lin AR(1) MLE ────────────────────────────────────────────────────────
 
@@ -144,6 +152,25 @@ def _partial_scale_factors(bim_flows, training_years):
     return factors
 
 
+def _seasonal_shares(bim_flows: pd.DataFrame, training_years: list) -> dict:
+    """
+    Mean quarterly share of annual indicator total, computed from training bimestral
+    flows (excl 2020 already removed from training_years by the caller).
+    Used to project quarters with zero available bimestres.
+    """
+    train = bim_flows[bim_flows["ano"].isin(training_years)]
+    qtly  = _bim_to_quarterly(train).copy()
+    qtly["valor_bilhoes"] = qtly["valor"] / 1e9
+    acc: dict[int, list] = {1: [], 2: [], 3: [], 4: []}
+    for _, grp in qtly.groupby("ano"):
+        total = grp["valor_bilhoes"].sum()
+        if total <= 1e-9:
+            continue
+        for row in grp.itertuples(index=False):
+            acc[int(row.trimestre)].append(float(row.valor_bilhoes) / total)
+    return {q: float(np.mean(vs)) for q, vs in acc.items() if vs}
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -219,11 +246,34 @@ def main():
     bias = _seasonal_bias(tab2, max(training_years))
 
     # ── Partial-quarter scaling ───────────────────────────────────────────────
-    # bim_flows already loaded; compute scale factors from training years only.
-    scale_factors = _partial_scale_factors(bim_flows, training_years)
+    scale_factors    = _partial_scale_factors(bim_flows, training_years)
+    seasonal_shares  = _seasonal_shares(bim_flows, training_years)
+
+    # Scaled indicator for every observed quarter (used to anchor the projection)
+    obs_x: dict[int, float] = {}
+    for q_obs in range(1, 5):
+        cont = _Q_BIMS[q_obs]
+        pres = sorted(b for b in cont if b in ny_avail)
+        if pres:
+            raw_x = float(ny_ind.get(q_obs, 0.0))
+            if len(pres) < len(cont):
+                raw_x *= scale_factors.get((q_obs, tuple(pres)), 1.0)
+            obs_x[q_obs] = raw_x
+
+    # Annual indicator estimate: mean of per-quarter anchors
+    annual_ests = [obs_x[q] / seasonal_shares[q]
+                   for q in obs_x if seasonal_shares.get(q, 0) > 1e-9]
+    annual_est = float(np.mean(annual_ests)) if annual_ests else None
+
+    # Projected indicator for quarters with zero bimestral data
+    x_proj: dict[int, float] = {}
+    if annual_est is not None:
+        for q in range(1, 5):
+            if q not in obs_x:
+                x_proj[q] = annual_est * seasonal_shares.get(q, 0.25)
 
     # Sanity reference: same-quarter CNT in last complete training year
-    ref = cnt[cnt["ano"] == max(training_years)].set_index("trimestre")["consumo_governo_bilhoes"]
+    ref     = cnt[cnt["ano"] == max(training_years)].set_index("trimestre")["consumo_governo_bilhoes"]
     cnt_qtly = cnt.set_index(["ano", "trimestre"])["consumo_governo_bilhoes"].to_dict()
 
     # ── Forecast loop ─────────────────────────────────────────────────────────
@@ -239,19 +289,26 @@ def main():
         present = sorted(b for b in contributing if b in ny_avail)
 
         if not present:
-            continue  # no bimestral data for this quarter; h still advances correctly
+            if q not in x_proj:
+                continue  # no data and no projection anchor; h advances correctly
+            x_q    = x_proj[q]
+            regime = "projetado"
+            print(f"  PROJETADO {periodo}: x_ind_proj={x_q:.2f}"
+                  f" (×{_PROJ_BIAS.get(q, 1.0):.3f} bias corr)")
+        elif len(present) < len(contributing):
+            sf     = scale_factors.get((q, tuple(present)), 1.0)
+            x_q    = float(ny_ind.get(q, 0.0)) * sf
+            regime = "parcial"
+            print(f"  PARCIAL {periodo}: bims={present}, scale={sf:.3f}")
+        else:
+            x_q    = float(ny_ind.get(q, 0.0))
+            regime = "completo"
 
-        x_q     = float(ny_ind.get(q, 0.0))
-        partial = len(present) < len(contributing)
-
-        if partial:
-            sf  = scale_factors.get((q, tuple(present)), 1.0)
-            x_q *= sf
-            print(f"  PARTIAL {periodo}: bims={present}, scale={sf:.3f}")
-
-        # AR(1) extrapolation + seasonal bias correction
+        # AR(1) extrapolation + seasonal bias correction + projetado bias multiplier
         y_raw = x_q * beta[0] + rho ** h * u_last
         y_est = y_raw / (1.0 + bias.get(q, 0.0) / 100.0)
+        if regime == "projetado":
+            y_est *= _PROJ_BIAS.get(q, 1.0)
 
         bims_str = ",".join(str(b) for b in present)
 
@@ -259,6 +316,7 @@ def main():
             "run_date":            today,
             "target_quarter":      periodo,
             "estimate":            round(y_est, 3),
+            "regime":              regime,
             "bimestres_available": bims_str,
         })
 
@@ -280,16 +338,16 @@ def main():
                       f"dev={dev:+.1f}% [salvo, mas fora de ±{_SANITY_PCT}%]")
 
         nowcast_out.append({
-            "periodo":           periodo,
-            "ano":               y,
-            "trimestre":         q,
-            "estimate_R_bi":     round(y_est, 3),
-            "method":            "CL_ex2020_sbias",
-            "indicador_parcial": partial,
-            "bimestres_used":    bims_str,
-            "data_estimativa":   today,
+            "periodo":        periodo,
+            "ano":            y,
+            "trimestre":      q,
+            "estimate_R_bi":  round(y_est, 3),
+            "method":         "CL_ex2020_sbias",
+            "regime":         regime,
+            "bimestres_used": bims_str,
+            "data_estimativa": today,
         })
-        print(f"  {periodo}: {y_est:.2f} R$ bi{' [PARCIAL]' if partial else ''}")
+        print(f"  {periodo}: {y_est:.2f} R$ bi [{regime.upper()}]")
 
     # ── Write outputs ─────────────────────────────────────────────────────────
     if nowcast_out:
