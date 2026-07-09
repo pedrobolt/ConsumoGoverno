@@ -12,368 +12,109 @@ fiscais bimestrais do SICONFI RREO como indicador de alta frequência e a CNT an
 do IBGE como benchmark. A estimativa segue o método de desagregação proporcional
 de Denton (1971).
 
-**Cobertura:** 2015–2025 (início do SICONFI). O artigo original cobre 2010–2014
+**Cobertura:** 2015–presente (início do SICONFI). O artigo original cobre 2010–2014
 com uma base de dados diferente; os números da Tabela 2 original não são
 numericamente reproduzíveis aqui — o que se replica é a *metodologia*.
 
-## Desvios e limitações em relação ao artigo original
-
-| Aspecto | Artigo (2015) | Este projeto |
-|---------|--------------|--------------|
-| Cobertura temporal | 2010–2014 | 2015–2025 |
-| Base fiscal subnacional | Finbra + EOE (pesos para RP) | SICONFI RREO (simplificado) |
-| Restos a Pagar | Pesos Finbra/EOE por esfera | RP Processados Pagos (SICONFI direto) |
-| Granularidade de despesas | Elemento (319011 etc., via SIAFI) | GND apenas (ver nota abaixo) |
-| Consumo intermediário | Pesos Finbra + tradutor IBGE(2008b) | GND3 total (teto) |
-| Municípios | Capitais com ponderação | Capitais sem ponderação (OFF por padrão) |
-
-**Granularidade SICONFI — limitação fundamental:** O SICONFI RREO Anexo 1
-retorna somente o nível GND (Grupo de Natureza de Despesa). Os códigos de
-elemento de natureza de despesa (319011, 319012, 319013, 319113, 339030, …)
-que o artigo usou existem apenas no SIAFI e em planos de trabalho estaduais,
-acessados pelos autores via SIGA Brasil. O SICONFI bulk API não expõe esse
-nível — verificado empiricamente: zero linhas com códigos de elemento em 3 710
-linhas de SP (Anexo 1, bim. 1/2023) e 4 308 linhas da União. A comparação
-elemento-vs-GND proposta no artigo **não é replicável a partir desta fonte**.
-O proxy de salários é o total GND1 ("PESSOAL E ENCARGOS SOCIAIS").
-
-**Consumo Intermediário:** O artigo extraía CI do GND3 usando pesos Finbra/EOE
-e o tradutor IBGE(2008b). Este projeto usa o total GND3 ("OUTRAS DESPESAS
-CORRENTES"), que é um teto: inclui transferências, juros e outros itens que não
-são CI. O artigo encontrou a série vencedora excluindo CI inteiramente;
-o GND3 existe como diagnóstico, não como candidato esperado.
-
-**Restos a Pagar:** Usa `RESTOS A PAGAR PROCESSADOS PAGOS` do Anexo 1 (coluna
-`RREO6PessoalEEncargosSociais`), sem os pesos Finbra/EOE que o artigo aplicava
-para distribuir RP entre esferas. Impacto visível no ranking de MSE.
-
-**Municípios (capitais):** desativados por padrão (`INCLUDE_MUNICIPIOS = False`).
-Testados empiricamente sobre 2015-2025: os 27 municípios-capital adicionam
-**+5,1 pp de representatividade** (de 29,3% para 34,4% da CNT, estável em todos
-os anos), o que é economicamente relevante — SP sozinho soma ~R$ 33 bi/ano em
-pessoal. Porém, o critério de seleção do artigo é o **MSE vs CNT**, e incluir
-as capitais *piora* o ajuste: `estados_munic` (RMSE = 13,9) fica atrás de
-`estados_only` (RMSE = 13,6) e ambos atrás do vencedor `estados_only_lef`
-(RMSE = 12,0). O motivo provável é a temporização diferente dos Restos a
-Pagar municipais. **Lacuna conhecida:** as capitais foram testadas apenas
-contra `liquidado`; a interação com `liq_efetiva` não foi testada. Para
-ativá-las: `INCLUDE_MUNICIPIOS = True` em `config.py`.
-
-## Intra-orçamentárias: com ou sem?
-
-`PessoalEEncargosSociaisIntra` representa as contribuições patronais pagas
-pelo ente ao próprio RPPS, registradas como despesa intra-orçamentária
-(~12% do GND1 para estados em 2023). O artigo (Tabela 1) lista CE e CI como
-componentes separados (R$63 bi vs R$50 bi em 2010), o que sugere que incluir
-a intra não é automaticamente dupla contagem com o Anexo 4.
-
-Porém, se a intra-orçamentária e a contribuição imputada (Anexo 4) medem o
-mesmo fluxo de obrigação previdenciária, o composite `com_intra` sistematicamente
-sobrestimará o consumo. Este projeto constrói os dois indicadores e deixa o
-ranking de MSE decidir: `estados_only` usa sem intra; `estados_only_com_intra`
-usa com intra. A série com menor MSE é a versão mais próxima da CNT.
-
-## Estrutura
-
-```
-config.py            — entidades, grade declarativa de candidatos, caminhos
-download.py          — baixa CNT (IBGE) + RREO (SICONFI) → data/raw/
-build_indicators.py  — raw → séries trimestrais por componente e candidato
-denton.py            — desagregação proporcional de Denton + helpers
-replicate.py         — roda a grade, rankeia por MSE, gera tabelas e gráfico
-deflate.py           — série real: deflator implícito CNT + crescimento a/a
-nowcast.py           — Chow-Lin AR(1) para trimestres sem CNT publicada (extensão)
-
-data/raw/            — dados brutos baixados (não versionados)
-data/processed/      — séries trimestrais intermediárias
-output/              — resultados finais (não versionados)
-```
+**Série vencedora (MSE vs CNT):** `estados_only_lef` — GND1 sem intra-orçamentárias,
+estágio `liq_efetiva` (liquidado + RP Processados Pagos), 27 estados. MAPE = 2,40%,
+RMSE = 12,0, correlação = 0,994 (2015–2025, 44 trimestres).
 
 ## Como executar
 
 ```bash
 pip install -r requirements.txt
 
-python download.py          # baixa CNT (IBGE), TRU, RREO Anexo 1 e RPPS União 04.2/04.3
-python build_indicators.py  # constrói grade de candidatos → data/processed/
-python replicate.py         # desagrega (Denton), rankeia, gera tabelas e gráfico
-python deflate.py           # série real: deflator implícito CNT → output/serie_real.csv
-python nowcast.py           # nowcast Chow-Lin para trimestres sem CNT (extensão)
+python download.py          # baixa CNT (IBGE), TRU, RREO Anexo 1 e RPPS Uniao 04.2/04.3
+python build_indicators.py  # constroi grade de candidatos -> data/processed/
+python replicate.py         # desagrega (Denton), rankeia, gera tabelas e grafico
+python deflate.py           # serie real: deflator implicito CNT -> output/serie_real.csv
+python nowcast.py           # nowcast Chow-Lin para trimestres sem CNT (extensao)
 ```
 
-As saídas em `output/` não são versionadas (ver `.gitignore`). Reexecute os quatro
-primeiros scripts acima para regenerá-las do zero a partir dos dados brutos.
-`nowcast.py` produz estimativas provisórias; ver seção Nowcast abaixo.
+As saidas em `output/` nao sao versionadas. Reexecute os scripts acima para
+regenera-las do zero a partir dos dados brutos.
 
-## Configuração
+## Estrutura
 
-Todos os parâmetros relevantes estão em `config.py`:
+```
+config.py            -- entidades, grade declarativa de candidatos, caminhos
+download.py          -- baixa CNT (IBGE) + RREO (SICONFI) -> data/raw/
+build_indicators.py  -- raw -> series trimestrais por componente e candidato
+denton.py            -- desagregacao proporcional de Denton + helpers
+replicate.py         -- roda a grade, rankeia por MSE, gera tabelas e grafico
+deflate.py           -- serie real: deflator implicito CNT + crescimento a/a
+nowcast.py           -- Chow-Lin AR(1) para trimestres sem CNT publicada (extensao)
+docs/METODOLOGIA.md  -- detalhes metodologicos, schema SICONFI, validacao nowcast
 
-| Constante | Padrão | Quando alterar |
-|-----------|--------|----------------|
-| `TRU_EDITION` | `2021` | Quando o IBGE publicar o SCN de referência 2021 com TRU não-nula por componente de governo. Atualizar também `TRU_ZIP_URL`. |
-| `TRU_ZIP_URL` | URL IBGE SCN 2021 | Par com `TRU_EDITION` — aponta para o ZIP da edição corrente. |
-| `RPPS_UNIAO_START_YEAR` | `2016` | Se o SICONFI retroagir dados de Anexo 04.2/04.3 para antes de 2016. |
-| `RPPS_UNIAO_ANEXOS` | `["RREO-Anexo 04.2", "RREO-Anexo 04.3"]` | Se o SICONFI adicionar novos sub-anexos RPPS (ex.: 04.5). Basta incluir na lista. |
-| `INCLUDE_MUNICIPIOS` | `False` | `True` ativa os 27 municípios-capital. Piora o MSE no período atual (ver nota Municípios). |
-| `YEAR_START` | `2015` | Ajustar se SICONFI retroagir dados anteriores a 2015. |
-| `YEAR_END` | `date.today().year` | Derivado automaticamente — avança em 1 janeiro sem edição manual. |
+data/raw/            -- dados brutos baixados (nao versionados)
+data/processed/      -- series trimestrais intermediarias
+output/              -- resultados finais (nao versionados)
+```
 
-## Saídas
+## Saidas
 
-| Arquivo | Conteúdo |
+| Arquivo | Conteudo |
 |---------|----------|
 | `output/ranking.csv` | Composites ordenados por MSE vs CNT |
-| `output/diagnostico_blocos.csv` | Blocos atômicos individuais — diagnóstico, não replicação |
-| `output/tabela2_desvios.csv` | Melhor série vs CNT, desvios trimestrais (Tabela 2) |
+| `output/diagnostico_blocos.csv` | Blocos atomicos individuais — diagnostico |
+| `output/tabela2_desvios.csv` | Melhor serie vs CNT, desvios trimestrais (Tabela 2) |
 | `output/tabela3_repres.csv` | Representatividade dos componentes vs TRU anual (Tabela 3) |
-| `output/serie_real.csv` | Série deflacionada + crescimento real a/a |
-| `output/fig_serie.png` | Melhor série vs CNT — linha (Gráfico 1) |
-| `output/nowcast.csv` | Estimativas Chow-Lin para trimestres sem CNT (extensão) |
+| `output/serie_real.csv` | Serie deflacionada + crescimento real a/a |
+| `output/fig_serie.png` | Melhor serie vs CNT — linha (Grafico 1) |
+| `output/nowcast.csv` | Estimativas Chow-Lin para trimestres sem CNT |
 | `output/vintage_nowcast.csv` | Log append-only de todas as rodadas de nowcast |
 
-## Fontes de dados
+## Configuracao
 
-- **CNT (benchmark):** IBGE, Tab_Compl_CNT.zip — coluna "Consumo do Governo",
-  valores correntes e índice de volume (base 2010=100).
-- **SICONFI RREO:** Tesouro Nacional, apidatalake.tesouro.gov.br/ords/siconfi/tt/rreo
-  — Anexo 1 (Pessoal/GND) e Anexo 04.2 + 04.3 (RPPS União: civis e militares).
-  Baixado separadamente em `data/raw/rreo_rpps_uniao.csv` via `download_siconfi_rpps_uniao()`.
-  Estados: contribuição patronal (`ReceitaDeContribuicoesPatronalFinanceiro`, Anexo 4).
-- **TRU (denominador Tabela 3):** IBGE, SCN edicao 2021,
-  `TRU_resumo_2000_2021_xls.zip` — coluna "Administracao publica" (detectada
-  dinamicamente via linha de contribuicoes imputadas dos empregadores).
-  Linhas utilizadas: 54 = Remuneracoes dos empregados; 59 = Contribuicoes
-  imputadas dos empregadores. Unidade no arquivo: R$ 1 milhao (verificado
-  empiricamente; GDP 2021 bate R$9 T); convertido para R$ bilhoes (/ 1000).
-  Cobertura: 2000-2021; edicao 2021 e a ultima com decomposicao nao-nula por
-  componente de governo. Anos 2022+ sao omitidos da Tabela 3.
+Parametros relevantes em `config.py`:
 
-## Grade de indicadores
+| Constante | Padrao | Quando alterar |
+|-----------|--------|----------------|
+| `YEAR_START` | `2015` | Se o SICONFI retroagir dados anteriores a 2015. |
+| `YEAR_END` | `date.today().year` | Derivado automaticamente — nao requer edicao manual. |
+| `TRU_EDITION` | `2021` | Quando o IBGE publicar SCN com TRU nao-nula por componente. Atualizar tambem `TRU_ZIP_URL`. |
+| `RPPS_UNIAO_START_YEAR` | `2016` | Se o SICONFI retroagir Anexo 04.2/04.3 para antes de 2016. |
+| `RPPS_UNIAO_ANEXOS` | `["RREO-Anexo 04.2", "RREO-Anexo 04.3"]` | Se o SICONFI adicionar novos sub-anexos RPPS. |
+| `INCLUDE_MUNICIPIOS` | `False` | `True` ativa os 27 municipios-capital (piora MSE no periodo atual). |
 
-**Blocos atômicos** (`CANDIDATE_SPECS` em `config.py`): 17 séries trimestrais,
-uma por combinação de esfera × estágio × componente. Alimentam os composites e
-o diagnóstico de blocos individuais.
+## Nowcast (extensao, nao replicacao)
 
-**Séries compostas** (`COMPOSITES` em `config.py`): 10 séries (7 ativas por
-padrão), cada uma somando blocos atômicos antes do Denton.
+**Este modulo NAO faz parte da replicacao de Santos et al. (2015).** Os valores
+produzidos por `nowcast.py` sao estimativas provisorias que serao revisadas quando o
+IBGE publicar os dados oficiais. Registro historico: `output/vintage_nowcast.csv`
+(append-only).
 
-| Série | Esferas | Componentes | Estágio |
-|-------|---------|-------------|---------|
-| uniao_only | U | sal+CE(sem intra)+contrib.imp+CI | liquidado |
-| estados_only | E | sal+CE sem intra | liquidado |
-| estados_only_com_intra | E | sal+CE com intra | liquidado |
-| uniao_estados | U+E | sal+CE sem intra | liquidado |
-| uniao_estados_ci | U+E | sal+CE sem intra + contrib.imp | liquidado |
-| estados_only_lef | E | sal+CE sem intra | liq_efetiva |
-| uniao_estados_lef | U+E | sal+CE sem intra | liq_efetiva |
-| estados_munic* | E+M | sal+CE sem intra | liquidado |
-| uniao_estados_munic* | U+E+M | sal+CE sem intra | liquidado |
-| uniao_estados_munic_ci* | U+E+M | sal+CE sem intra + contrib.imp | liquidado |
+Metodo: **Chow-Lin AR(1) GLS**, rho por MV, correcao sazonal ex-post. Indicador:
+`estados_only_lef`. Exclui 2020 do treinamento (quebra COVID). MAPE pseudo-OOS:
+**2,34%** (rolling-origin 2023-2025, regime completo/parcial).
 
-\* Ativadas com `INCLUDE_MUNICIPIOS = True`.
+### Tres regimes
 
-**Contrib. imputadas: cobertura parcial.** SICONFI Anexo 04.2/04.3 da União
-só expõe Resultado RPPS para militares (2018-2020) e civis (2023+). Estados
-RPPS disponível a partir de 2021. Cobertura plena (~100% da TRU) exigiria
-fontes não disponíveis via API pública (SIAFI, Portal da Transparência —
-testado e bloqueado por controle de acesso). Configurável: `RPPS_UNIAO_START_YEAR`
-e `RPPS_UNIAO_ANEXOS` em `config.py`. Quando novos sub-anexos forem adicionados
-ao SICONFI, basta incluí-los na lista.
+| `regime` | Quando | O que e projetado |
+|----------|--------|-------------------|
+| **completo** | Todos os bimestres do trimestre publicados | Indicador observado |
+| **parcial** | Parte dos bimestres disponivel | Indicador escalado por razao historica |
+| **projetado** | Nenhum bimestre do trimestre disponivel | Indicador via participacao sazonal x multiplicador LOO |
 
-**Resultado empírico (2015-2025, 44 trimestres, INCLUDE_MUNICIPIOS=False):**
+O regime muda automaticamente a cada nova rodada conforme novos bimestres chegam.
+Regime `projetado`: MAPE Q3 ~3%, Q4 ~5% (validado em 6 origens, 2019-2025; horse
+race de 4 metodos — vencedor: metodo B, multiplicador LOO).
 
-| Rank | Série | RMSE | MAPE | Corr |
-|------|-------|------|------|------|
-| 1 | `estados_only_lef` | 12,0 | 2,40% | 0,994 |
-| 2 | `estados_only` | 13,6 | 2,67% | 0,992 |
-| 3 | `estados_only_com_intra` | 13,9 | 2,57% | 0,992 |
-| 4 | `uniao_estados_lef` | 14,0 | 2,69% | 0,992 |
-| 5 | `uniao_estados` | 15,9 | 2,75% | 0,989 |
-| 6 | `uniao_estados_ci` | 16,9 | 2,96% | 0,988 |
-| 7 | `uniao_only` | 65,3 | 9,15% | 0,834 |
+Os multiplicadores de vies (`_PROJ_BIAS` em `nowcast.py`) **devem ser revistos
+anualmente** com os erros ex-post de `vintage_nowcast.csv`. Derivacao, backtest
+completo e analise de estabilidade: ver [`docs/METODOLOGIA.md`](docs/METODOLOGIA.md).
 
-A série selecionada (`estados_only_lef`) usa GND1 sem intra-orçamentárias,
-estágio `liq_efetiva` (liquidado + RP Processados Pagos), esfera estados.
-`tabela2_desvios.csv` e `fig_serie.png` correspondem a esta série.
+## Limitacoes
 
-O ranking por MSE vs CNT revela qual combinação melhor aproxima o consumo
-do governo trimestral. O diagnóstico de blocos individuais
-(`output/diagnostico_blocos.csv`) é útil, mas não é o objeto de replicação.
+- **GND vs elemento de despesa:** SICONFI nao expoe codigos de elemento (319011 etc.); proxy e o total GND1. Ver `docs/METODOLOGIA.md`.
+- **Restos a Pagar:** RP Processados Pagos sem pesos Finbra/EOE que o artigo aplicava. Ver `docs/METODOLOGIA.md`.
+- **Contribuicoes imputadas:** cobertura parcial no SICONFI (militares 2018-2020, civis 2023+, estados 2021+). Ver `docs/METODOLOGIA.md`.
+- **Municipios (capitais):** desativados por padrao; piora o MSE no periodo atual. Ver `docs/METODOLOGIA.md`.
+- **TRU 2021:** ultima edicao com decomposicao nao-nula; Tabela 3 limitada a 2015-2021. Ver `docs/METODOLOGIA.md`.
+- **Cobertura temporal:** 2015-presente; periodo 2010-2014 do artigo requer bases Finbra/EOE/SIGA Brasil nao disponiveis via API publica.
 
-**Resultado empírico — Tabela 3 (representatividade vs TRU, INCLUDE_MUNICIPIOS=False):**
+---
 
-A Tabela 3 divide cada componente da amostra SICONFI pelo total do mesmo componente
-na TRU "governo geral" (coluna Administração Pública). O numerador usa
-`estados_lef_sal_sem_intra` para remunerações (GND1 sem intra, liq_efetiva).
-
-| Ano  | Componente            | TRU (R$ bi) | Amostra (R$ bi) | Repr. (%) |
-|------|-----------------------|-------------|-----------------|-----------|
-| 2015 | remuneracoes_sal_ce   | 797,9       | 583,7           | 73,2%     |
-| 2016 | remuneracoes_sal_ce   | 847,0       | 619,6           | 73,2%     |
-| 2017 | remuneracoes_sal_ce   | 897,7       | 681,3           | 75,9%     |
-| 2018 | remuneracoes_sal_ce   | 938,5       | 819,0           | 87,3%     |
-| 2019 | remuneracoes_sal_ce   | 990,2       | 953,3           | 96,3%     |
-| 2020 | remuneracoes_sal_ce   | 1.028,9     | 960,9           | 93,4%     |
-| 2021 | remuneracoes_sal_ce   | 1.076,9     | 988,4           | 91,8%     |
-| 2018 | contrib_imputadas     | 96,8        | 19,1            | 19,7%     |
-| 2019 | contrib_imputadas     | 105,1       | 47,0            | 44,7%     |
-| 2020 | contrib_imputadas     | 97,8        | 44,9            | 45,9%     |
-| 2021 | contrib_imputadas     | 100,6       | 33,5            | 33,3%     |
-
-Desvios em relação ao artigo original na Tabela 3:
-
-| Aspecto | Artigo (2015) | Este projeto |
-|---------|--------------|--------------|
-| Remunerações | Separado: sal. + contrib. efetivas | GND1 sem intra (SICONFI não separa) |
-| Contrib. imputadas | Cobertura plena U+E | Parcial: militares 2018-2020, civis 2023+ (União); estados 2021+ (ver nota abaixo) |
-| Cobertura TRU | 2010-2014 | 2015-2021 (TRU SCN-2021) |
-
-**Lacuna RP Processados Pagos (2015-2017):** A representatividade de
-2015-2017 (~73-76%) subestima a cobertura real em ~20 pp porque o SICONFI
-nao reportava Restos a Pagar Processados Pagos para estados antes de 2018.
-A partir de 2018, com RP disponivel, a cobertura sobe para ~87-96%,
-consistente com a participacao dos 27 estados nas remuneracoes nacionais.
-O Denton nao e afetado por essa lacuna (MAPE sem quebra estrutural
-pre/pos-2018) porque usa apenas o perfil sazonal, nao o nivel.
-As linhas de 2015-2017 em `tabela3_repres.csv` trazem a nota
-"RP indisponivel no SICONFI" na coluna `nota`.
-
-## Nowcast (extensão, não replicação)
-
-**Este módulo NÃO faz parte da replicação de Santos et al. (2015).** Os valores
-produzidos por `nowcast.py` são estimativas provisórias para trimestres sem CNT
-publicada e serão revisados — sem aviso — quando o IBGE publicar os dados oficiais.
-O registro histórico de todas as estimativas e seus erros ex-post está em
-`output/vintage_nowcast.csv` (append-only; nunca sobrescreve rodadas anteriores).
-
-### Método
-
-**Chow-Lin AR(1) GLS** com rho estimado por máxima verossimilhança (perfil), mais
-correção sazonal ex-post. Especificação vencedora de um horse race de 8 combinações
-(2 métodos × 2 amostras × 2 correções) por validação pseudo-fora-da-amostra:
-
-- **Indicador:** `estados_only_lef` (GND1 sem intra, liq_efetiva, 27 estados)
-- **Treinamento:** anos com CNT anual completa, excluindo 2020 (quebra estrutural COVID)
-- **rho:** estimado por MV a cada rodada (~0,84 no período 2015–2025)
-- **Correção sazonal:** ajuste ex-post multiplicativo por trimestre, usando o desvio
-  médio histórico da série Denton (tabela2_desvios.csv). Não é dummy dentro da
-  regressão — é pós-estimação.
-
-### Acurácia pseudo-fora-da-amostra (horse race completo)
-
-Protocolo rolling-origin: treina até ano T, prevê todos os 4 trimestres de T+1.
-Origens: 2022→2023, 2023→2024, 2024→2025. CNT de 2023-2025 disponível para comparação.
-
-| Especificação | MAPE 2023 | MAPE 2024 | MAPE 2025 | **Média** |
-|---------------|-----------|-----------|-----------|-----------|
-| **CL_ex2020_sbias** ✓ | 2,94% | 1,58% | 2,51% | **2,34%** |
-| CL_sbias | 3,38% | 1,49% | 2,74% | 2,54% |
-| CL_ex2020 | 3,62% | 1,42% | 3,16% | 2,73% |
-| CL (base) | 3,97% | 1,41% | 3,39% | 2,93% |
-| FZ_ex2020_sbias | 7,76% | 2,91% | 5,91% | 5,52% |
-| FZ_sbias | 8,18% | 3,33% | 6,27% | 5,93% |
-| FZ_ex2020 | 8,46% | 3,44% | 6,58% | 6,16% |
-| FZ (base) | 8,89% | 3,93% | 6,95% | 6,59% |
-
-CL = Chow-Lin AR(1) MLE; FZ = Fernandez (passeio aleatório); sbias = correção sazonal;
-ex2020 = exclui 2020 do treinamento.
-
-Fernandez foi descartado: MAPE 2-3× maior, com erro sistemático de Q4 de -11% a -18%
-(o passeio aleatório não acomoda o pico de gasto de dezembro do governo).
-
-### Erros por trimestre — especificação vencedora
-
-O erro varia significativamente por trimestre. **Q2 e Q4 têm incerteza ~2-3× maior
-que Q1.** Planeje análises sensíveis com margens de erro distintas por trimestre.
-
-| Ano teste | rho | Q1 | Q2 | Q3 | Q4 | MAPE |
-|-----------|-----|----|----|----|----|------|
-| 2023 | 0,8445 | +0,14% | **-4,00%** | -2,11% | **-5,53%** | 2,94% |
-| 2024 | 0,8340 | -2,38% | +1,02% | -0,38% | +2,56% | 1,58% |
-| 2025 | 0,8372 | +0,61% | **-3,36%** | **-3,67%** | -2,39% | 2,51% |
-| **Média** | **0,84** | **-0,54%** | **-2,11%** | **-2,05%** | **-1,79%** | **2,34%** |
-| **\|Média\|** | | **1,04%** | **2,79%** | **2,05%** | **3,49%** | |
-
-Erro médio absoluto por trimestre: Q1 ≈ 1%, Q2 ≈ 3%, Q3 ≈ 2%, Q4 ≈ 3,5%.
-
-### Três regimes — campo `regime` em `nowcast.csv`
-
-Cada trimestre estimado recebe um dos três valores:
-
-| `regime` | Quando ocorre | O que é projetado |
-|----------|---------------|-------------------|
-| **completo** | Todos os bimestres do trimestre publicados | Indicador observado diretamente |
-| **parcial** | Só parte dos bimestres disponível (ex.: bim2 mas não bim3 em Q2) | Indicador escalado por razão histórica bim/trimestre |
-| **projetado** | Nenhum bimestre do trimestre publicado ainda (ex.: Q3/Q4 em junho) | Indicador projetado via participação sazonal histórica, ancorado nos bimestres H1 observados |
-
-O regime `projetado` é revisado **automaticamente** em cada nova rodada: quando
-os bimestres chegam, o trimestre passa a `parcial` e depois a `completo`, sem
-intervenção manual.
-
-### Acurácia por regime
-
-**Regime completo/parcial** (horse race rolling-origin, indicador observado):
-
-| Trimestre | \|Erro médio\| |
-|-----------|----------------|
-| Q1 | ≈ 1,0% |
-| Q2 | ≈ 2,8% |
-| Q3 | ≈ 2,1% |
-| Q4 | ≈ 3,5% |
-| **Média** | **2,34%** |
-
-**Regime projetado** (pseudo-OOS mid-year, apenas bim1+2, indicador projetado):
-
-Protocolo: stand em junho de cada ano de teste, prevê Q3 e Q4 usando apenas bim1+2.
-Quatro métodos avaliados em janela de 6 anos (2019, 2021–2025; 2020 excluído por
-COVID; 2016–2018 excluídos por amostra de treino insuficiente < 4 anos). Vencedor:
-método B (participação sazonal + multiplicador LOO), menor MAPE e sem viés unilateral.
-
-| Método | MAPE Q3 | MAPE Q4 | Combinado | Sinal dos erros |
-|--------|---------|---------|-----------|-----------------|
-| A — participação sazonal (baseline) | 5,1% | 5,5% | 5,3% | mistos |
-| **B — A × multiplicador LOO** ✓ | **2,9%** | **5,0%** | **4,0%** | mistos |
-| C — SARIMA(1,1,1)(0,1,1,4) | 4,9% | 5,6% | 5,2% | mistos |
-| D — ARIMA não-sazonal ✗ | 5,2% | 8,9% | 7,1% | mistos |
-
-**Por que D foi eliminado:** ARIMA(1,1,2) sem componente sazonal extrapola a tendência
-recente e falha no pico de gastos de dezembro (Q4 MAPE = 8,9%, quase 2× pior que B).
-O SARIMA com `(P,D,Q,4)` captura o padrão anual; o ARIMA simples não consegue.
-
-O método A subestima sistematicamente o H2 (gastos de fim de ano dos estados não
-estão visíveis em bim1+2). O método B aplica multiplicadores empíricos por trimestre
-(`_PROJ_BIAS` em `nowcast.py`), validados por leave-one-out sobre a janela de 6 anos:
-
-| Trimestre | Multiplicador | Base empírica |
-|-----------|---------------|---------------|
-| Q3 | 1,061 | Média LOO excl. 2019 e 2020 (n=5, origens 2021–2025) |
-| Q4 | 1,053 | Média LOO excl. 2019 e 2020 (n=5, origens 2021–2025) |
-
-2019 excluído da média dos multiplicadores: apenas 4 anos de treino disponíveis,
-produzindo razão Q4 = 0,92 (outlier de amostra pequena; z = −1,94 na distribuição
-das 6 origens). Com 2019 incluído, a média Q4 cai para 1,031. Revisar anualmente:
-`vintage_nowcast.csv` acumula os erros ex-post quando a CNT publica os valores oficiais.
-
-`projetado` é ~1,5× menos preciso que `completo`. Q3 esperado ~3% (após correção);
-Q4 esperado ~5% (alta variância — o pico de dezembro é difícil de antecipar em junho).
-
-### Atenção: erros pseudo-OOS vs erros em tempo real
-
-Todos os erros acima foram medidos em retrospecto com dados revisados. Erros reais
-podem diferir por revisões do SICONFI e sazonalidades atípicas.
-
-`vintage_nowcast.csv` é o registro autoritativo da acurácia real: cada rodada é
-gravada com a data da estimativa e o regime, e o erro ex-post se computa
-automaticamente quando a CNT publica os valores oficiais.
-
-### Como usar
-
-1. Execute `python download.py` e `python build_indicators.py` (se houver dados novos).
-2. Execute `python nowcast.py`.
-
-`YEAR_END` em `config.py` é derivado automaticamente do ano calendário — não requer
-atualização manual. O script detecta automaticamente quais trimestres não têm CNT
-publicada, escolhe o regime adequado e nowcasta todos os trimestres restantes do ano.
-
-
+Detalhes metodologicos completos, descobertas de schema SICONFI e justificativas de
+cada desvio do paper: ver [`docs/METODOLOGIA.md`](docs/METODOLOGIA.md).
